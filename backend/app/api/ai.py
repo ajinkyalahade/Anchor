@@ -2,7 +2,7 @@
 
 import hashlib
 import uuid
-from datetime import date
+from datetime import UTC, date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: F401  (used in helper type hints)
 
-from app.ai.router import AITask, route
+from app.ai.router import AITask, PromptContext, route
 from app.api.deps import CurrentUserId, UserEnginePref
 from app.core.encryption import encrypt_text
 from app.core.input_safety import sanitize_prompt_text
@@ -72,7 +72,9 @@ async def get_user_state(
     comeback = reward_state.comeback_bonus_active if reward_state else False
 
     from sqlalchemy.orm import selectinload
-    user_row = await db.execute(select(User).where(User.id == user_id).options(selectinload(User.profile)))
+    user_row = await db.execute(
+        select(User).where(User.id == user_id).options(selectinload(User.profile))
+    )
     user = user_row.scalar_one_or_none()
     profile = user.profile if user else None
     crash_window = profile.crash_window if profile else None
@@ -309,7 +311,6 @@ async def talk_to_anchor(
     db: DbSession,
 ) -> CoachResponse:
     """Multi-turn AI coach — stores conversation history per session."""
-    from app.ai.router import PromptContext
     from app.ai.safety.classifier import CRISIS_RESPONSE_PAYLOAD, check_crisis
 
     if check_crisis(data.message):
@@ -338,7 +339,9 @@ async def talk_to_anchor(
     # Build prompt context from user state
     ctx = await _build_prompt_context(db, user_id)
 
-    result = await route(AITask.COACH, {"message": data.message, "history": history}, ctx, engine_pref=engine_pref)
+    result = await route(
+        AITask.COACH, {"message": data.message, "history": history}, ctx, engine_pref=engine_pref
+    )
 
     # Assemble assistant reply text and save it
     assistant_text = " ".join(filter(None, [
@@ -387,12 +390,13 @@ async def _save_message(
     return msg
 
 
-async def _build_prompt_context(db: AsyncSession, user_id: uuid.UUID):
+async def _build_prompt_context(db: AsyncSession, user_id: uuid.UUID) -> PromptContext:
     """Build a PromptContext from current user state and DB history."""
-    from datetime import datetime
     from collections import Counter
+    from datetime import datetime
+
     from sqlalchemy.orm import selectinload
-    from app.ai.router import PromptContext
+
     from app.db.models import FocusSession, GameSession, Quest
 
     # XP + rewards
@@ -518,7 +522,9 @@ async def _build_prompt_context(db: AsyncSession, user_id: uuid.UUID):
     # Games
     if total_game_sessions:
         game_summary = ", ".join(f"{k}: {v}" for k, v in game_counts.most_common(3))
-        memories.append(f"Brain game sessions: {total_game_sessions} total (recent: {game_summary})")
+        memories.append(
+            f"Brain game sessions: {total_game_sessions} total (recent: {game_summary})"
+        )
 
     # Quests / calm activities
     if quests:
@@ -528,13 +534,18 @@ async def _build_prompt_context(db: AsyncSession, user_id: uuid.UUID):
         )
         mood_delta_quests = [q for q in quests if q.mood_before and q.mood_after]
         if mood_delta_quests:
-            avg_delta = sum(q.mood_after - q.mood_before for q in mood_delta_quests) / len(mood_delta_quests)
+            avg_delta = sum(
+                q.mood_after - q.mood_before for q in mood_delta_quests
+            ) / len(mood_delta_quests)
             memories.append(f"Average mood lift from quests: +{avg_delta:.1f} points")
 
     # Mood check-ins
     if mood_scores:
         avg_mood = sum(mood_scores) / len(mood_scores)
-        memories.append(f"Recent mood check-ins (1–5): avg {avg_mood:.1f} over last {len(mood_scores)} entries")
+        memories.append(
+            f"Recent mood check-ins (1–5): avg {avg_mood:.1f}"
+            f" over last {len(mood_scores)} entries"
+        )
 
     return PromptContext(
         user_state=state,
@@ -617,7 +628,7 @@ async def submit_checkin(
 async def get_latest_checkin(
     user_id: CurrentUserId,
     db: DbSession,
-) -> dict:
+) -> dict[str, Any]:
     """Return the most recent check-in timestamp so the frontend knows when to prompt again."""
     row = await db.execute(
         select(MoodCheckin.score, MoodCheckin.created_at)
@@ -649,9 +660,9 @@ async def get_daily_briefing(
     db: DbSession,
 ) -> BriefingResponse:
     """Return a personalised daily briefing, cached in Redis for 1h per user per day."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     cache_key = f"briefing:{user_id}:{today}"
 
     cache = getattr(request.app.state, "cache", None)
@@ -680,7 +691,7 @@ async def get_daily_briefing(
 # ── Engine status ─────────────────────────────────────────────────────────────
 
 @router.get("/engines")
-async def get_engine_status() -> dict:
+async def get_engine_status() -> dict[str, Any]:
     """Return availability and model list for each AI engine."""
     from app.ai.router import get_engines_status
     return await get_engines_status()

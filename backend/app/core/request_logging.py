@@ -6,11 +6,10 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import Callable
 
 import jwt
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.core.config import get_settings
 
@@ -18,7 +17,9 @@ logger = logging.getLogger("anchor.http")
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         request_id = str(uuid.uuid4())
         start = time.monotonic()
         user_id = _extract_user_id(request)

@@ -14,6 +14,7 @@ const MOODS = [
 const CHECKIN_KEY = 'anchor_last_checkin';
 const CHECKIN_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function shouldShowCheckin(): boolean {
   const last = localStorage.getItem(CHECKIN_KEY);
   if (!last) return true;

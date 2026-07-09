@@ -31,7 +31,6 @@ describe('rewards idempotency', () => {
         source: 'focus',
         base_xp: 10,
         reason: 'completed focus session',
-        user_id: 'user-123',
       },
       { idempotencyKey: 'reward-focus-uuid-123' },
     );

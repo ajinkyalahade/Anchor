@@ -41,7 +41,7 @@ class OllamaEngine:
             think=False,   # disable chain-of-thought tokens (qwen3/deepseek-r1 etc.)
             options={"num_predict": max_tokens, "temperature": 0.2},
         )
-        return response.message.content or ""  # type: ignore[union-attr]
+        return response.message.content or ""
 
     async def health(self) -> EngineStatus:
         try:
@@ -51,7 +51,7 @@ class OllamaEngine:
             _EXCLUDE = {"kimi"}
             models = [
                 m.model for m in (models_response.models or [])
-                if not any(x in (m.model or "") for x in _EXCLUDE)
+                if m.model and not any(x in m.model for x in _EXCLUDE)
             ]
             return EngineStatus(available=True, models=models)
         except Exception as exc:

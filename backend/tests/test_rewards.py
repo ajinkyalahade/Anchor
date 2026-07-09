@@ -18,7 +18,7 @@ from app.domain.rewards.service import (
     summarize_rewards,
 )
 from app.main import app
-from tests.helpers import auth_headers_for
+from tests.helpers import FakeResult, auth_headers_for
 
 
 class ScalarListResult:
@@ -56,6 +56,9 @@ class FakeSession:
         if model is RewardState:
             return self.reward_states.get(key)
         return None
+
+    async def execute(self, statement):
+        return FakeResult(list(self.users.values()))
 
     async def scalar(self, statement):
         query = str(statement)
@@ -240,7 +243,7 @@ async def test_grant_reward_creates_ledger_entry_and_updates_summary() -> None:
     assert data["total_xp"] == 12
     assert data["current_streak"] == 1
     assert len(fake_session.ledger) == 1
-    assert fake_session.reward_states[user_id].last_activity_date == date.today()
+    assert fake_session.reward_states[user_id].last_activity_date == datetime.now(UTC).date()
 
 
 # ---------------------------------------------------------------------------

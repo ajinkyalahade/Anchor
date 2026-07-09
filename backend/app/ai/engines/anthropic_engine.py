@@ -1,8 +1,10 @@
 """Anthropic (Claude) engine implementation."""
 
 import logging
+from typing import cast
 
 from anthropic import AsyncAnthropic
+from anthropic.types import MessageParam, TextBlock
 
 from app.ai.engines.base import EngineStatus
 
@@ -34,9 +36,10 @@ class AnthropicEngine:
             model=self._model,
             max_tokens=max_tokens,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-            messages=messages,
+            messages=cast(list[MessageParam], messages),
         )
-        return response.content[0].text
+        block = response.content[0]
+        return block.text if isinstance(block, TextBlock) else ""
 
     async def health(self) -> EngineStatus:
         if not self._client:

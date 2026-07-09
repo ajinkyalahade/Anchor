@@ -2,19 +2,20 @@
 
 import uuid
 from datetime import UTC, date, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserId
+from app.api.deps import CurrentUserId, OptionalUserId
 from app.db.database import get_db
 from app.db.models import RewardLedger, RewardState, User, UserStateSnapshot
 from app.domain.rewards.service import (
     UNLOCK_CATALOG,
     RewardSource,
+    RewardSummary,
     StreakSnapshot,
     UnlockItem,
     advance_streak_after_activity,
@@ -41,7 +42,6 @@ class RewardGrantRequest(BaseModel):
     source: RewardSource
     base_xp: int = Field(gt=0, le=500)
     reason: str = Field(default="showed up", max_length=255)
-    user_id: uuid.UUID | None = None
 
 
 class RewardGrantResponse(BaseModel):
@@ -72,7 +72,6 @@ class UnlocksResponse(BaseModel):
 
 class ActivateUnlockRequest(BaseModel):
     item_id: str
-    user_id: uuid.UUID
 
 
 class ActivateUnlockResponse(BaseModel):
@@ -87,7 +86,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/summary", response_model=RewardsSummaryResponse)
 async def get_rewards_summary(
     db: DbSession,
-    user_id: CurrentUserId = None,
+    user_id: OptionalUserId = None,
 ) -> RewardsSummaryResponse:
     """Get the user's current XP and activity state."""
     if user_id is None:
@@ -128,13 +127,8 @@ async def grant_xp(
     db: DbSession,
     header_user_id: CurrentUserId,
 ) -> RewardGrantResponse:
-    """Grant XP to a user and persist the ledger entry."""
-    user_id = data.user_id or header_user_id
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="user_id is required to grant XP",
-        )
+    """Grant XP to the authenticated user and persist the ledger entry."""
+    user_id = header_user_id
 
     from sqlalchemy.orm import selectinload as _sil
     _ur = await db.execute(select(User).where(User.id == user_id).options(_sil(User.profile)))
@@ -196,7 +190,7 @@ async def grant_xp(
 @router.get("/unlocks", response_model=UnlocksResponse)
 async def get_unlocks(
     db: DbSession,
-    user_id: CurrentUserId = None,
+    user_id: OptionalUserId = None,
 ) -> UnlocksResponse:
     """Return unlock catalog with locked/unlocked status for the user."""
     if user_id is None:
@@ -207,7 +201,7 @@ async def get_unlocks(
 
     total_xp = await _total_xp(db, user_id)
     user = await db.get(User, user_id)
-    prefs: dict = user.prefs if user and user.prefs else {}
+    prefs: dict[str, Any] = user.prefs if user and user.prefs else {}
 
     return UnlocksResponse(
         total_xp=total_xp,
@@ -220,10 +214,11 @@ async def get_unlocks(
 @router.post("/unlocks/activate", response_model=ActivateUnlockResponse)
 async def activate_unlock(
     data: ActivateUnlockRequest,
+    user_id: CurrentUserId,
     db: DbSession,
 ) -> ActivateUnlockResponse:
-    """Set an unlocked theme or sound as active for the user."""
-    user = await db.get(User, data.user_id)
+    """Set an unlocked theme or sound as active for the authenticated user."""
+    user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -232,7 +227,7 @@ async def activate_unlock(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown item")
 
     item: UnlockItem = catalog_index[data.item_id]
-    total_xp = await _total_xp(db, data.user_id)
+    total_xp = await _total_xp(db, user_id)
     if total_xp < item.xp_required:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -251,7 +246,7 @@ async def activate_unlock(
     )
 
 
-def _to_catalog_models(catalog: list) -> list[UnlockCatalogItem]:
+def _to_catalog_models(catalog: list[dict[str, Any]]) -> list[UnlockCatalogItem]:
     return [UnlockCatalogItem(**entry) for entry in catalog]
 
 
@@ -267,8 +262,8 @@ async def _upsert_user_state_snapshot(
         .group_by(RewardLedger.source)
     )
     xp_by_source: dict[str, int] = {row.source: int(row.total) for row in rows}
-    from sqlalchemy.orm import selectinload as _sil
     from sqlalchemy import select as _sel
+    from sqlalchemy.orm import selectinload as _sil
     _ur = await db.execute(_sel(User).where(User.id == user.id).options(_sil(User.profile)))
     user = _ur.scalar_one_or_none() or user
     crash_window = user.profile.crash_window if (user and user.profile) else None
@@ -288,7 +283,7 @@ async def _upsert_user_state_snapshot(
     await db.flush()
 
 
-async def _build_summary(db: AsyncSession, user_id: uuid.UUID):
+async def _build_summary(db: AsyncSession, user_id: uuid.UUID) -> RewardSummary:
     total_xp = await db.scalar(
         select(func.coalesce(func.sum(RewardLedger.xp), 0)).where(
             RewardLedger.user_id == user_id,

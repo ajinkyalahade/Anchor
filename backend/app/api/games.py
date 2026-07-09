@@ -81,7 +81,9 @@ async def start_word_gym() -> WordGymStartResponse:
 @router.post("/wordgym/evaluate", response_model=WordGymEvaluateResponse)
 async def evaluate_word(data: WordGymEvaluateRequest) -> WordGymEvaluateResponse:
     try:
-        eval_result = await route(AITask.EVALUATE_WORD, {"base_word": data.base_word, "user_word": data.user_word})
+        eval_result = await route(
+            AITask.EVALUATE_WORD, {"base_word": data.base_word, "user_word": data.user_word}
+        )
     except Exception:
         eval_result = {
             "valid": False,
@@ -240,7 +242,11 @@ class QuestCompleteResponse(BaseModel):
     xp_awarded: int
 
 
-@router.post("/quests/complete", response_model=QuestCompleteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/quests/complete",
+    response_model=QuestCompleteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def complete_quest(
     data: QuestCompleteRequest,
     user_id: CurrentUserId,
@@ -258,4 +264,6 @@ async def complete_quest(
     )
     db.add(quest)
     await db.flush()
-    return QuestCompleteResponse(id=str(quest.id), quest_key=quest.quest_key, xp_awarded=quest.xp_awarded)
+    return QuestCompleteResponse(
+        id=str(quest.id), quest_key=quest.quest_key, xp_awarded=quest.xp_awarded
+    )

@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import FocusPage from './FocusPage';
 import React from 'react';
@@ -89,41 +91,51 @@ describe('FocusPage', () => {
       why_first_step_matters: 'Starting counts.',
     });
 
-    render(<FocusPage />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <FocusPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
 
+    // Enter a task and break it into micro-steps (calls /focus/decompose).
     fireEvent.change(
-      screen.getByPlaceholderText('E.g., Write the first draft of the project proposal...'),
+      screen.getByPlaceholderText('Type it the way it lives in your head…'),
       { target: { value: 'Draft proposal' } },
     );
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /start focus/i }));
+      fireEvent.click(screen.getByRole('button', { name: /break into micro-steps/i }));
     });
     expect(apiPostMock).toHaveBeenCalledWith('/focus/decompose', { task_text: 'Draft proposal' });
+    expect(await screen.findByText('Open the file')).toBeInTheDocument();
 
-    expect(await screen.findByText('25:00')).toBeInTheDocument();
-    vi.useFakeTimers();
-
-    const runningButtons = screen.getAllByRole('button');
-    fireEvent.click(runningButtons[0]);
+    // Start the session (creates a server-side session), then pause and resume.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      fireEvent.click(screen.getByRole('button', { name: /start session/i }));
     });
-    expect(screen.getByText('25:00')).toBeInTheDocument();
+    expect(apiPostMock).toHaveBeenCalledWith('/focus/sessions', expect.objectContaining({
+      duration_planned: 20 * 60,
+      task_text: 'Draft proposal',
+    }));
 
-    fireEvent.click(screen.getAllByRole('button')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /pause/i }));
+    // Paused: the primary button returns to a start/resume state and the
+    // "done early" affordance is hidden until running again.
+    const resumeButton = screen.getByRole('button', { name: /start session|resume/i });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
+      fireEvent.click(resumeButton);
     });
-    expect(screen.getByText('24:59')).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button')[1]);
-
+    // Finish early → reward is granted exactly once.
+    fireEvent.click(screen.getByRole('button', { name: /done early/i }));
     await waitFor(() => {
       expect(screen.getByText('Focus complete.')).toBeInTheDocument();
     });
     expect(recordFocusInsightSessionMock).toHaveBeenCalledTimes(1);
     expect(grantRewardMock).toHaveBeenCalledTimes(1);
 
+    // Starting a new session does not re-grant the previous reward.
     fireEvent.click(screen.getByRole('button', { name: 'New Session' }));
     expect(grantRewardMock).toHaveBeenCalledTimes(1);
   });

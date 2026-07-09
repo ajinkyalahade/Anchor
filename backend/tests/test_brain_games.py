@@ -1,13 +1,12 @@
 """Tests for brain game session endpoints and Gemini classifier."""
 
-import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from tests.helpers import auth_headers_for
+from tests.helpers import register_test_user
 
 
 @pytest.fixture
@@ -17,12 +16,12 @@ def app():
 
 @pytest.mark.asyncio
 async def test_game_session_start_returns_90s_cap(app):
-    user_id = uuid.uuid4()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _, headers = await register_test_user(client)
         resp = await client.post(
             "/v1/games/sessions",
             json={"game_key": "echo"},
-            headers=auth_headers_for(user_id),
+            headers=headers,
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -33,13 +32,13 @@ async def test_game_session_start_returns_90s_cap(app):
 
 @pytest.mark.asyncio
 async def test_game_session_start_all_game_keys(app):
-    user_id = uuid.uuid4()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _, headers = await register_test_user(client)
         for game_key in ["echo", "mirror", "spotter", "lockstep", "switch", "tracker"]:
             resp = await client.post(
                 "/v1/games/sessions",
                 json={"game_key": game_key},
-                headers=auth_headers_for(user_id),
+                headers=headers,
             )
             assert resp.status_code == 200, f"Failed for {game_key}"
             data = resp.json()
@@ -49,7 +48,6 @@ async def test_game_session_start_all_game_keys(app):
 
 @pytest.mark.asyncio
 async def test_game_session_complete_returns_xp_and_next(app):
-    user_id = uuid.uuid4()
     with patch("app.api.games.route", new_callable=AsyncMock) as mock_route:
         mock_route.return_value = {
             "state": "focused",
@@ -58,10 +56,11 @@ async def test_game_session_complete_returns_xp_and_next(app):
             "reason": "You're focused — try something harder.",
         }
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            _, headers = await register_test_user(client)
             start = await client.post(
                 "/v1/games/sessions",
                 json={"game_key": "echo"},
-                headers=auth_headers_for(user_id),
+                headers=headers,
             )
             session_id = start.json()["session_id"]
 
@@ -74,7 +73,7 @@ async def test_game_session_complete_returns_xp_and_next(app):
                     "rt_var": 55,
                     "completed": True,
                 },
-                headers=auth_headers_for(user_id),
+                headers=headers,
             )
             assert resp.status_code == 200
             data = resp.json()
@@ -92,9 +91,9 @@ async def test_game_session_complete_returns_xp_and_next(app):
 
 @pytest.mark.asyncio
 async def test_get_next_game_endpoint(app):
-    user_id = uuid.uuid4()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/v1/games/next", headers=auth_headers_for(user_id))
+        _, headers = await register_test_user(client)
+        resp = await client.get("/v1/games/next", headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert "next_game" in data

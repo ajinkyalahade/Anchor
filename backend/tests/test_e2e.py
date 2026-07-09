@@ -12,7 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from app.db.database import get_db
 from app.db.models import Profile, RewardState, User
 from app.main import app
-from tests.helpers import auth_headers_for
+from tests.helpers import FakeResult, auth_headers_for
 
 
 class FakeSession:
@@ -42,7 +42,7 @@ class FakeSession:
         return None
 
     async def execute(self, statement):
-        return []
+        return FakeResult()
 
     async def scalar(self, statement) -> object | None:
         return None

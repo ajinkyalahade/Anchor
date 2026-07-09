@@ -137,7 +137,7 @@ def _normalize_participant_name(value: str) -> str:
     words = re.findall(r"[A-Za-z0-9']+", value.strip())
     if not words:
         return "Anchor guest"
-    return words[0][:32]
+    return str(words[0])[:32]
 
 
 def _build_participant_identity(participant_name: str) -> str:

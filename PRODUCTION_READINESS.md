@@ -227,11 +227,11 @@ No logging configuration at all (no level, format, or JSON structure — relies 
 
 ## Suggested order of attack
 
-1. **`git init` + first commit** (after fixing `.gitignore` and removing `creds.md`) — nothing else is safe to change without version control. _(C1)_
-2. **Fix the two auth/data vulnerabilities**: deletion IDOR (SEC-1) and idempotency user-scoping (SEC-2) — small, surgical fixes.
-3. **Startup config validation**: refuse to boot in production with default secrets / zero encryption key / debug on (SEC-3).
-4. **Make CI green**: fix ruff/mypy/tsc/eslint debt, make backend tests hermetic (Postgres service container or SQLite/testcontainers), fix stale assertions, dedupe workflows (C7, TEST-1/2, INF-6).
-5. **Production serving**: frontend build + reverse proxy, non-root backend image, migrations as a deploy step, worker process for deletions/nudges (INF-2/3, BE-6).
-6. **Auth hardening**: rate-limit auth routes, refresh/revocation or shorter tokens, logout endpoint, password reset + email delivery (SEC-4/5).
-7. **Decide the production AI engine + add fallback-rate alerting** (AI-1/2), then the crisis-classifier language gap (AI-3).
-8. Observability baseline: error tracking, structured logs, OTLP wired to something (OBS-1/2).
+- [x] 1. **`git init` + first commit** (after fixing `.gitignore` and removing `creds.md`) — nothing else is safe to change without version control. _(C1)_ ✅ 2026-07-08: repo initialized on `main`; `.gitignore` extended (creds.md, .playwright-mcp/, storybook-static/, .tmp-*/, caches); removed empty nested `backend/.git` and stray empty `app/domain/rewards/service.py`; 312 files committed, verified no secrets/artifacts tracked.
+- [x] 2. **Fix the two auth/data vulnerabilities**: deletion IDOR (SEC-1) and idempotency user-scoping (SEC-2). ✅ 2026-07-08: deletion now always targets the token's user (`user_id` removed from payload + frontend); idempotency keys scoped by hashed bearer credentials. Regression tests added; both suites green (commit 74c4266).
+- [x] 3. **Startup config validation**: refuse to boot in production with default secrets / zero encryption key / debug on (SEC-3). ✅ 2026-07-08: `Settings` model validator aborts boot on insecure production config; encryption module refuses zero-key fallback in production. 12 new tests; verified boot failure/success both ways.
+- [ ] 4. **Make CI green**: fix ruff/mypy/tsc/eslint debt, make backend tests hermetic (Postgres service container or SQLite/testcontainers), fix stale assertions, dedupe workflows (C7, TEST-1/2, INF-6).
+- [ ] 5. **Production serving**: frontend build + reverse proxy, non-root backend image, migrations as a deploy step, worker process for deletions/nudges (INF-2/3, BE-6).
+- [ ] 6. **Auth hardening**: rate-limit auth routes, refresh/revocation or shorter tokens, logout endpoint, password reset + email delivery (SEC-4/5).
+- [ ] 7. **Decide the production AI engine + add fallback-rate alerting** (AI-1/2), then the crisis-classifier language gap (AI-3).
+- [ ] 8. Observability baseline: error tracking, structured logs, OTLP wired to something (OBS-1/2).

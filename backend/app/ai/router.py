@@ -5,7 +5,11 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from app.ai.engines.anthropic_engine import AnthropicEngine
+    from app.ai.engines.ollama_engine import OllamaEngine
 
 from anthropic import AsyncAnthropic
 
@@ -34,14 +38,23 @@ class PromptContext:
     streak_state: str = ""
 
     def to_system_block(self) -> str:
-        if not any([self.user_state, self.relevant_memories, self.recent_session_summaries, self.streak_state]):
+        has_context = any([
+            self.user_state,
+            self.relevant_memories,
+            self.recent_session_summaries,
+            self.streak_state,
+        ])
+        if not has_context:
             return ""
         lines: list[str] = ["", "[User Context]"]
         if self.user_state:
             energy = self.user_state.get("energy_level", "?")
             load = self.user_state.get("emotional_load", "?")
             freshness = self.user_state.get("cognitive_freshness", "?")
-            lines.append(f"Energy: {energy}/5 | Emotional load: {load}/5 | Cognitive freshness: {freshness}/5")
+            lines.append(
+                f"Energy: {energy}/5 | Emotional load: {load}/5"
+                f" | Cognitive freshness: {freshness}/5"
+            )
             if self.streak_state:
                 lines.append(f"Streak state: {self.streak_state}")
             if self.time_of_day:
@@ -107,7 +120,10 @@ _FALLBACKS: dict[AITask, dict[str, Any]] = {
     },
     AITask.INSIGHT_WEEKLY: {
         "title": "Weekly pattern read",
-        "summary": "Your strongest work still lands earlier in the day. Protect the first clean block before urgency starts grabbing the wheel.",
+        "summary": (
+            "Your strongest work still lands earlier in the day."
+            " Protect the first clean block before urgency starts grabbing the wheel."
+        ),
         "bullets": [
             "Morning focus is outperforming late-day sessions.",
             "20-25 minute blocks are giving you the best return.",
@@ -141,7 +157,7 @@ _FALLBACKS: dict[AITask, dict[str, Any]] = {
 
 # ── Engine resolution ─────────────────────────────────────────────────────────
 
-def get_engine(task: str = "", engine_pref: str = ""):
+def get_engine(task: str = "", engine_pref: str = "") -> "AnthropicEngine | OllamaEngine":
     """Return the right engine for (task, engine_pref).
 
     engine_pref: 'anthropic' | 'ollama' | 'auto' | '' (uses settings default)
@@ -162,7 +178,9 @@ def get_engine(task: str = "", engine_pref: str = ""):
     return AnthropicEngine(api_key=settings.anthropic_api_key, task=task)
 
 
-async def _resolve_engine(task: str, engine_pref: str = ""):
+async def _resolve_engine(
+    task: str, engine_pref: str = ""
+) -> "AnthropicEngine | OllamaEngine":
     """Resolve engine with 'auto' fallback logic."""
     pref = engine_pref or settings.ai_default_engine
     if pref != "auto":
@@ -225,7 +243,9 @@ async def _dispatch(
     if task == AITask.QUEST_WEEKLY:
         return await _run_quest_weekly(payload, engine)
     if task == AITask.CLASSIFY_GAME_SESSION:
-        return await _run_classify_game(payload["rt_mean"], payload["rt_var"], payload["accuracy"], payload["game_key"], engine)
+        return await _run_classify_game(
+            payload["rt_mean"], payload["rt_var"], payload["accuracy"], payload["game_key"], engine
+        )
     if task == AITask.DAILY_BRIEFING:
         return await _run_daily_briefing(payload, context, engine)
     if task == AITask.NUDGE:
@@ -233,12 +253,19 @@ async def _dispatch(
     raise ValueError(f"Unknown task: {task}")
 
 
-def _log(event: str, task: AITask, engine_name: str, start: float, error: str | None = None) -> None:
+def _log(
+    event: str, task: AITask, engine_name: str, start: float, error: str | None = None
+) -> None:
     latency_ms = int((time.monotonic() - start) * 1000)
     if error:
-        logger.warning("%s task=%s engine=%s latency_ms=%d error=%s", event, task.value, engine_name, latency_ms, error)
+        logger.warning(
+            "%s task=%s engine=%s latency_ms=%d error=%s",
+            event, task.value, engine_name, latency_ms, error,
+        )
     else:
-        logger.info("%s task=%s engine=%s latency_ms=%d", event, task.value, engine_name, latency_ms)
+        logger.info(
+            "%s task=%s engine=%s latency_ms=%d", event, task.value, engine_name, latency_ms
+        )
     try:
         from opentelemetry import trace
         span = trace.get_current_span()
@@ -260,17 +287,22 @@ def _parse_json(text: str) -> dict[str, Any]:
         text = text.split("```json")[1].split("```")[0]
     elif "```" in text:
         text = text.split("```")[1].split("```")[0]
-    return json.loads(text.strip())
+    return cast(dict[str, Any], json.loads(text.strip()))
 
 
-async def _run_decompose(task_text: str, context: PromptContext | None, engine: Any) -> dict[str, Any]:
+async def _run_decompose(
+    task_text: str, context: PromptContext | None, engine: Any
+) -> dict[str, Any]:
     from app.ai.prompts.decompose import DECOMPOSE_PROMPT_SYSTEM
     from app.ai.prompts.registry import DECOMPOSE_SPEC, validate_output
 
     context_block = context.to_system_block() if context else ""
     text = await engine.complete(
         system=DECOMPOSE_PROMPT_SYSTEM + context_block,
-        messages=[{"role": "user", "content": f"Task: {task_text}\n\nRespond with strictly valid JSON."}],
+        messages=[{
+            "role": "user",
+            "content": f"Task: {task_text}\n\nRespond with strictly valid JSON.",
+        }],
         max_tokens=1024,
     )
     result = _parse_json(text)
@@ -322,17 +354,27 @@ async def _run_evaluate_word(base_word: str, user_word: str, engine: Any) -> dic
         max_tokens=128,
     )
     result = _parse_json(text)
-    return result if validate_output(WORDGYM_SPEC, result) else dict(_FALLBACKS[AITask.EVALUATE_WORD])
+    if validate_output(WORDGYM_SPEC, result):
+        return result
+    return dict(_FALLBACKS[AITask.EVALUATE_WORD])
 
 
-async def _run_rsd(trigger_text: str, intensity: int, context: PromptContext | None, engine: Any) -> dict[str, Any]:
+async def _run_rsd(
+    trigger_text: str, intensity: int, context: PromptContext | None, engine: Any
+) -> dict[str, Any]:
     from app.ai.prompts.registry import RSD_SPEC, validate_output
     from app.ai.prompts.rsd import RSD_SYSTEM_PROMPT
 
     context_block = context.to_system_block() if context else ""
     text = await engine.complete(
         system=RSD_SYSTEM_PROMPT + context_block,
-        messages=[{"role": "user", "content": f"Intensity: {intensity}/10\nTrigger: {trigger_text}\n\nRespond with strictly valid JSON."}],
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Intensity: {intensity}/10\nTrigger: {trigger_text}"
+                "\n\nRespond with strictly valid JSON."
+            ),
+        }],
         max_tokens=256,
     )
     result = _parse_json(text)
@@ -349,7 +391,9 @@ async def _run_insight_weekly(payload: dict[str, Any], engine: Any) -> dict[str,
         max_tokens=384,
     )
     result = _parse_json(text)
-    return result if validate_output(INSIGHT_WEEKLY_SPEC, result) else dict(_FALLBACKS[AITask.INSIGHT_WEEKLY])
+    if validate_output(INSIGHT_WEEKLY_SPEC, result):
+        return result
+    return dict(_FALLBACKS[AITask.INSIGHT_WEEKLY])
 
 
 async def _run_quest_weekly(payload: dict[str, Any], engine: Any) -> dict[str, Any]:
@@ -362,23 +406,37 @@ async def _run_quest_weekly(payload: dict[str, Any], engine: Any) -> dict[str, A
         max_tokens=256,
     )
     result = _parse_json(text)
-    return result if validate_output(QUEST_WEEKLY_SPEC, result) else dict(_FALLBACKS[AITask.QUEST_WEEKLY])
+    if validate_output(QUEST_WEEKLY_SPEC, result):
+        return result
+    return dict(_FALLBACKS[AITask.QUEST_WEEKLY])
 
 
-async def _run_classify_game(rt_mean: int, rt_var: int, accuracy: int, game_key: str, engine: Any) -> dict[str, Any]:
+async def _run_classify_game(
+    rt_mean: int, rt_var: int, accuracy: int, game_key: str, engine: Any
+) -> dict[str, Any]:
     from app.ai.prompts.classify_game import CLASSIFY_GAME_SYSTEM_PROMPT
     from app.ai.prompts.registry import CLASSIFY_GAME_SESSION_SPEC, validate_output
 
     text = await engine.complete(
         system=CLASSIFY_GAME_SYSTEM_PROMPT + "\nRespond ONLY with valid JSON.",
-        messages=[{"role": "user", "content": f"rt_mean={rt_mean}ms, rt_var={rt_var}ms, accuracy={accuracy}%, game={game_key}"}],
+        messages=[{
+            "role": "user",
+            "content": (
+                f"rt_mean={rt_mean}ms, rt_var={rt_var}ms,"
+                f" accuracy={accuracy}%, game={game_key}"
+            ),
+        }],
         max_tokens=128,
     )
     result = _parse_json(text)
-    return result if validate_output(CLASSIFY_GAME_SESSION_SPEC, result) else dict(_FALLBACKS[AITask.CLASSIFY_GAME_SESSION])
+    if validate_output(CLASSIFY_GAME_SESSION_SPEC, result):
+        return result
+    return dict(_FALLBACKS[AITask.CLASSIFY_GAME_SESSION])
 
 
-async def _run_daily_briefing(payload: dict[str, Any], context: PromptContext | None, engine: Any) -> dict[str, Any]:
+async def _run_daily_briefing(
+    payload: dict[str, Any], context: PromptContext | None, engine: Any
+) -> dict[str, Any]:
     from app.ai.prompts.briefing import BRIEFING_SYSTEM_PROMPT
 
     context_block = context.to_system_block() if context else ""
@@ -406,11 +464,11 @@ async def _run_nudge(payload: dict[str, Any], engine: Any) -> dict[str, Any]:
 
 # ── Engine status ─────────────────────────────────────────────────────────────
 
-async def get_engines_status() -> dict:
+async def get_engines_status() -> dict[str, Any]:
+    import asyncio
+
     from app.ai.engines.anthropic_engine import AnthropicEngine
     from app.ai.engines.ollama_engine import OllamaEngine
-
-    import asyncio
     anthropic = AnthropicEngine(api_key=settings.anthropic_api_key)
     ollama = OllamaEngine(base_url=settings.ollama_base_url)
     a_status, o_status = await asyncio.gather(anthropic.health(), ollama.health())
@@ -422,7 +480,9 @@ async def get_engines_status() -> dict:
 
 # ── Backward-compatible wrappers ──────────────────────────────────────────────
 
-async def decompose_task_with_claude(task_text: str, schema: dict[str, Any], system_prompt: str) -> dict[str, Any]:
+async def decompose_task_with_claude(
+    task_text: str, schema: dict[str, Any], system_prompt: str
+) -> dict[str, Any]:
     return await route(AITask.DECOMPOSE, {"task_text": task_text})
 
 

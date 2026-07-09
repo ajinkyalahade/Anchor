@@ -58,7 +58,7 @@ class OnboardingResponse(BaseModel):
 async def complete_onboarding(
     data: OnboardingRequest,
     db: DbSession,
-):
+) -> OnboardingResponse:
     """
     Creates a user and profile from the onboarding flow.
     If email + password are provided, creates a full account.

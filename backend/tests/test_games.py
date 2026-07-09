@@ -30,7 +30,7 @@ async def test_wordgym_evaluate_returns_scored_response() -> None:
     user_id = uuid.uuid4()
     transport = ASGITransport(app=app)
 
-    with patch("app.api.games.evaluate_word_association_with_gemini", new=AsyncMock()) as mock_eval:
+    with patch("app.api.games.route", new=AsyncMock()) as mock_eval:
         mock_eval.return_value = {
             "valid": True,
             "score": 4,
@@ -68,7 +68,7 @@ async def test_wordgym_evaluate_handles_timeout_with_fallback() -> None:
     user_id = uuid.uuid4()
     transport = ASGITransport(app=app)
 
-    with patch("app.api.games.evaluate_word_association_with_gemini", new=AsyncMock()) as mock_eval:
+    with patch("app.api.games.route", new=AsyncMock()) as mock_eval:
         mock_eval.side_effect = TimeoutError("provider timeout")
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(

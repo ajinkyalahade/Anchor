@@ -134,14 +134,23 @@ export default function GamesPage() {
     }
   }, [navigate]);
 
+  // Sync the active game mode to the :gameId route param (external source).
   useEffect(() => {
-    if (!gameId) { setMode('menu'); return; }
+    if (!gameId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMode('menu');
+      return;
+    }
     const routeMap: Record<string, Exclude<GameMode, 'menu'>> = {
       'word-gym': 'wordgym', echo: 'echo', mirror: 'mirror',
       spotter: 'spotter', lockstep: 'lockstep', switch: 'switch', tracker: 'tracker',
     };
     const m = routeMap[gameId];
-    if (m) { setMode(m); setGameState('start'); }
+    if (m) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMode(m);
+      setGameState('start');
+    }
   }, [gameId]);
 
   const finishGame = useCallback(() => {

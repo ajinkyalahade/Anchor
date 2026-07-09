@@ -59,9 +59,12 @@ export default function FocusPage() {
   const [parkInput, setParkInput] = useState('');
   const [parked, setParked] = useState<string[]>([]);
 
+  // One-time prefill from navigation state (also clears it from history) —
+  // a genuine external-source sync, so setState here is intentional.
   useEffect(() => {
     const prefill = (location.state as { prefillTask?: string } | null)?.prefillTask?.trim();
     if (prefill && !taskText) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTaskText(prefill.slice(0, TASK_TEXT_MAX_LENGTH));
       window.history.replaceState({}, document.title);
     }
@@ -86,7 +89,7 @@ export default function FocusPage() {
         distractions_jsonb: distractions,
       }).catch(() => {});
     }
-  }, [durationPreset, rewardGranted, serverSessionId, totalSeconds, secondsLeft, decomposition, distractions]);
+  }, [durationPreset, rewardGranted, serverSessionId, totalSeconds, secondsLeft, decomposition, distractions, qc]);
 
   useEffect(() => {
     if (!running) return undefined;

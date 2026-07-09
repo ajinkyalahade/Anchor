@@ -3,10 +3,9 @@
 import logging
 import time
 import uuid
-from collections.abc import Callable
 
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 logger = logging.getLogger("anchor.audit")
 
@@ -21,7 +20,9 @@ _SENSITIVE_PREFIXES = (
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         if not any(request.url.path.startswith(p) for p in _SENSITIVE_PREFIXES):
             return await call_next(request)
 

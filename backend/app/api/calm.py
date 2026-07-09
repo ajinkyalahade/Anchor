@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.router import AITask, route
 from app.ai.safety.classifier import CRISIS_RESPONSE_PAYLOAD, check_crisis
-from app.api.deps import CurrentUserId, UserEnginePref
+from app.api.deps import UserEnginePref
 from app.core.encryption import encrypt_text
 from app.core.input_safety import sanitize_prompt_text
 from app.core.rate_limit import build_rate_limit_dependency

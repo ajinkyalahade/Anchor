@@ -10,12 +10,6 @@ interface Message {
   ts?: string;
 }
 
-interface CoachSession {
-  id: string;
-  started_at: string;
-  summary: string | null;
-}
-
 interface CoachResponse {
   session_id: string;
   is_crisis?: boolean;

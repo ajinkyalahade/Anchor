@@ -48,6 +48,8 @@ const TOOLS: { id: CalmTool; name: string; sub: string; icon: React.ReactNode; r
 function BreathStage({ pattern, setPattern }: { pattern: BreathPattern; setPattern: (p: BreathPattern) => void }) {
   const [phase, setPhase] = useState('Inhale');
 
+  // Drives the breathing animation via a self-scheduling timer loop —
+  // a genuine external-system sync, so the initial setPhase is intentional.
   useEffect(() => {
     const cycles: Record<BreathPattern, { p: string; d: number }[]> = {
       '4-7-8':            [{ p: 'Inhale', d: 4000 }, { p: 'Hold', d: 7000 }, { p: 'Exhale', d: 8000 }],
@@ -56,6 +58,7 @@ function BreathStage({ pattern, setPattern }: { pattern: BreathPattern; setPatte
     };
     let i = 0;
     const cycle = cycles[pattern];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPhase(cycle[0].p);
     const tick = () => { i = (i + 1) % cycle.length; setPhase(cycle[i].p); timer = setTimeout(tick, cycle[i].d); };
     let timer = setTimeout(tick, cycle[0].d);

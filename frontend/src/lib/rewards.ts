@@ -55,7 +55,6 @@ export async function grantReward(
       source,
       base_xp: baseXp,
       reason,
-      user_id: userId,
     }, { idempotencyKey: createIdempotencyKey(`reward-${source}`) });
   } catch (error) {
     console.error('Reward grant failed', error);
@@ -80,7 +79,7 @@ export async function activateItem(itemId: string): Promise<boolean> {
   try {
     await api.post(
       '/rewards/unlocks/activate',
-      { item_id: itemId, user_id: userId },
+      { item_id: itemId },
       { idempotencyKey: createIdempotencyKey(`unlock-${itemId}`) },
     );
     if (itemId.startsWith('theme_')) {

@@ -37,8 +37,9 @@ def test_decompose_routes_to_claude() -> None:
     assert ROUTING_TABLE[AITask.DECOMPOSE] == AIProvider.CLAUDE
 
 
-def test_evaluate_word_routes_to_gemini() -> None:
-    assert ROUTING_TABLE[AITask.EVALUATE_WORD] == AIProvider.GEMINI
+def test_evaluate_word_routes_to_claude() -> None:
+    # Word evaluation moved from Gemini to Claude when the Gemini engine was removed.
+    assert ROUTING_TABLE[AITask.EVALUATE_WORD] == AIProvider.CLAUDE
 
 
 def test_rsd_routes_to_claude() -> None:

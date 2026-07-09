@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message
@@ -29,7 +29,9 @@ class IdempotencyKeyMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
 
-    async def dispatch(self, request: Request, call_next: Any) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         if request.method != "POST":
             return await call_next(request)
 
@@ -69,7 +71,11 @@ class IdempotencyKeyMiddleware(BaseHTTPMiddleware):
 
         await _reset_request_body(request, body)
         response = await call_next(request)
-        response_body = b"".join([chunk async for chunk in response.body_iterator])
+        # call_next actually returns a StreamingResponse at runtime; the
+        # static type is the plain Response, which lacks body_iterator.
+        response_body = b"".join(
+            [chunk async for chunk in response.body_iterator]  # type: ignore[attr-defined]
+        )
 
         replayable = Response(
             content=response_body,
@@ -183,4 +189,4 @@ async def _reset_request_body(request: Request, body: bytes) -> None:
         sent = True
         return {"type": "http.request", "body": body, "more_body": False}
 
-    request._receive = receive  # type: ignore[attr-defined]
+    request._receive = receive

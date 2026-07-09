@@ -44,6 +44,11 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# Prompt files are long-form natural language; migrations are generated.
+"app/ai/prompts/*" = ["E501"]
+"migrations/versions/*" = ["E501"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true
@@ -51,4 +56,9 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# One event loop for the whole session: the SQLAlchemy engine/pool is
+# module-level, and per-test loops leave pooled connections bound to
+# closed loops ("Future attached to a different loop" errors).
+asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]

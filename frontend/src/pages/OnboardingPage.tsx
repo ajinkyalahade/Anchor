@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Button, Card } from '../components/ui';
 import AnchorWordmark from '../components/AnchorWordmark';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import confetti from 'canvas-confetti';
 
 type Step = 'welcome' | 'tags' | 'crash' | 'email' | 'tour' | 'done' | 'nav';
@@ -167,9 +167,10 @@ export default function OnboardingPage() {
       api.setAuthToken(response.access_token);
 
       setStep('tour');
-    } catch (e: any) {
-      if (e?.detail) {
-        setSubmitError(e.detail);
+    } catch (e) {
+      const detail = e instanceof ApiError ? e.detail : null;
+      if (detail) {
+        setSubmitError(detail);
       } else {
         console.error(e);
         setStep('tour');

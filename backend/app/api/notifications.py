@@ -1,7 +1,7 @@
 """Push notification subscription and delivery endpoints (1G.1)."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -28,7 +28,7 @@ _CRASH_WINDOW_HOURS: dict[str, int] = {
 
 
 class PushSubscribeRequest(BaseModel):
-    subscription: dict
+    subscription: dict[str, Any]
     crash_window: str  # morning|midday|afternoon|evening|late_night
 
 
@@ -62,7 +62,7 @@ async def get_vapid_public_key() -> dict[str, str]:
     return {"public_key": settings.vapid_public_key}
 
 
-def send_push_notification(subscription: dict, payload: dict) -> bool:
+def send_push_notification(subscription: dict[str, Any], payload: dict[str, Any]) -> bool:
     """Send a web push to one subscription. Returns True on success."""
     if not settings.vapid_private_key:
         logger.warning("push_skipped no VAPID key configured")

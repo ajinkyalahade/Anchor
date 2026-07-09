@@ -51,17 +51,8 @@ describe('HomePage', () => {
     window.localStorage.clear();
   });
 
-  it('renders with empty rewards fallback', async () => {
-    apiGetMock
-      .mockRejectedValueOnce(new Error('rewards unavailable'))
-      .mockResolvedValueOnce({
-        action: 'focus',
-        label: 'Start a focus sprint',
-        route: '/focus',
-        duration: '25 min',
-        reason: 'You have momentum available.',
-        week_label: null,
-      });
+  it('falls back to a default suggestion when the suggestion API fails', async () => {
+    apiGetMock.mockRejectedValueOnce(new Error('suggestion unavailable'));
 
     render(
       <MemoryRouter>
@@ -69,26 +60,19 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('0 XP')).toBeInTheDocument();
-    expect(screen.getByText('Start a focus sprint')).toBeInTheDocument();
+    // On failure HomePage shows its built-in default focus suggestion.
+    expect(await screen.findByText('A 20-minute focus block.')).toBeInTheDocument();
   });
 
-  it('renders the personalized suggestion when APIs succeed', async () => {
-    apiGetMock
-      .mockResolvedValueOnce({
-        total_xp: 42,
-        current_streak: 3,
-        streak_state: 'steady',
-        comeback_bonus_active: false,
-      })
-      .mockResolvedValueOnce({
-        action: 'calm',
-        label: 'Reset in Calm Zone',
-        route: '/calm',
-        duration: '3 min',
-        reason: 'A quick reset fits your recent pattern.',
-        week_label: null,
-      });
+  it('renders the personalized suggestion when the API succeeds', async () => {
+    apiGetMock.mockResolvedValueOnce({
+      action: 'calm',
+      label: 'Reset in Calm Zone',
+      route: '/calm',
+      duration: '3 min',
+      reason: 'A quick reset fits your recent pattern.',
+      week_label: null,
+    });
 
     render(
       <MemoryRouter>
@@ -97,9 +81,8 @@ describe('HomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('42 XP')).toBeInTheDocument();
+      expect(screen.getByText('Reset in Calm Zone')).toBeInTheDocument();
     });
-    expect(screen.getByText('Reset in Calm Zone')).toBeInTheDocument();
     expect(screen.getByText('A quick reset fits your recent pattern.')).toBeInTheDocument();
   });
 });

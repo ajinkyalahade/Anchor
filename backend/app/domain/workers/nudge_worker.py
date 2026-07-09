@@ -9,13 +9,16 @@ Triggers a nudge if any of:
 
 import asyncio
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.router import AITask, route
 from app.db.database import async_session_factory
-from app.db.models import FocusSession, Profile, PushSubscription, RewardState, User
+from app.db.models import FocusSession, PushSubscription, RewardState, User
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,7 @@ def _is_waking_hours() -> bool:
     return 8 <= h <= 22
 
 
-async def run_nudge_check() -> dict:
+async def run_nudge_check() -> dict[str, Any]:
     """Main entry point — check all subscribed users and send nudges as needed."""
     if not _is_waking_hours():
         return {"skipped": "outside waking hours"}
@@ -63,6 +66,9 @@ async def run_nudge_check() -> dict:
 
         for sub in subscriptions:
             user_id = sub.user_id
+            if user_id is None:
+                skipped += 1
+                continue
             prefs_result = await db.execute(
                 select(User.prefs).where(User.id == user_id)
             )
@@ -89,10 +95,14 @@ async def run_nudge_check() -> dict:
     return {"sent": sent, "skipped": skipped}
 
 
-async def _should_nudge(db, user_id, sub: PushSubscription, nudge_freq: str) -> str | None:
+async def _should_nudge(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    sub: PushSubscription,
+    nudge_freq: str,
+) -> str | None:
     """Return a reason string if a nudge should fire, else None."""
     now = datetime.now(UTC)
-    min_gap = timedelta(hours=_NUDGE_FREQ_MIN_GAP_HOURS.get(nudge_freq, 6))
 
     # 1. Crash window approaching (within 30 min)
     crash_hour = sub.crash_hour
@@ -103,7 +113,9 @@ async def _should_nudge(db, user_id, sub: PushSubscription, nudge_freq: str) -> 
     # 2. Streak about to break (active streak, no activity in 20+ hours)
     reward_state = await db.get(RewardState, user_id)
     if reward_state and reward_state.current_streak > 0 and reward_state.last_activity_date:
-        last_active = datetime.combine(reward_state.last_activity_date, datetime.min.time()).replace(tzinfo=UTC)
+        last_active = datetime.combine(
+            reward_state.last_activity_date, datetime.min.time()
+        ).replace(tzinfo=UTC)
         if now - last_active > timedelta(hours=20):
             return "streak_at_risk"
 
@@ -121,7 +133,7 @@ async def _should_nudge(db, user_id, sub: PushSubscription, nudge_freq: str) -> 
     return None
 
 
-def _send_push(subscription: dict, title: str, body: str) -> None:
+def _send_push(subscription: dict[str, Any], title: str, body: str) -> None:
     from app.api.notifications import send_push_notification
     send_push_notification(subscription, {"title": title, "body": body, "icon": "/icon-192.png"})
 

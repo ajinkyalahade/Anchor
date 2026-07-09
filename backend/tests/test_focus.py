@@ -15,7 +15,7 @@ async def test_decompose_endpoint_returns_steps() -> None:
     user_id = uuid.uuid4()
     transport = ASGITransport(app=app)
 
-    with patch("app.api.focus.decompose_task_with_claude", new=AsyncMock()) as mock_decompose:
+    with patch("app.api.focus.route", new=AsyncMock()) as mock_decompose:
         mock_decompose.return_value = {
             "steps": [{"label": "Open the document", "est_minutes": 1, "first": True}],
             "why_first_step_matters": "Opening counts as starting.",

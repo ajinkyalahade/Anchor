@@ -1,7 +1,7 @@
 """Account lifecycle endpoints."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -47,7 +47,7 @@ async def update_preferences(
     data: PreferencesUpdate,
     user_id: CurrentUserId,
     db: DbSession,
-) -> dict:
+) -> dict[str, Any]:
     """Update user preferences (nudge frequency, AI engine, etc.)."""
     user = await db.get(User, user_id)
     if user is None:
@@ -72,7 +72,7 @@ async def update_preferences(
 async def get_preferences(
     user_id: CurrentUserId,
     db: DbSession,
-) -> dict:
+) -> dict[str, Any]:
     """Return current user preferences."""
     user = await db.get(User, user_id)
     if user is None:

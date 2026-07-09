@@ -18,6 +18,7 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function shouldShowBriefing(): boolean {
   return localStorage.getItem(BRIEFING_DISMISSED_KEY) !== todayStr();
 }

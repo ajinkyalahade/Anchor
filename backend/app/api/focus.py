@@ -11,8 +11,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.prompts.decompose import DECOMPOSE_PROMPT_SCHEMA, DECOMPOSE_PROMPT_SYSTEM
-from app.ai.router import AITask, anthropic_client, decompose_task_with_claude, route
+from app.ai.prompts.decompose import DECOMPOSE_PROMPT_SYSTEM
+from app.ai.router import AITask, anthropic_client, route
 from app.api.deps import CurrentUserId, UserEnginePref
 from app.core.config import get_settings
 from app.core.input_safety import sanitize_prompt_text
@@ -127,7 +127,7 @@ async def create_session(
     data: FocusSessionCreate,
     user_id: CurrentUserId,
     db: DbSession,
-):
+) -> dict[str, str]:
     """Start a new focus session."""
     session = FocusSession(
         user_id=user_id,
@@ -145,7 +145,7 @@ async def update_session(
     session_id: uuid.UUID,
     data: FocusSessionUpdate,
     db: DbSession,
-):
+) -> dict[str, str]:
     """End or update a focus session."""
     session = await db.get(FocusSession, session_id)
     if session is None:

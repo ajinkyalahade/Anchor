@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
@@ -77,6 +77,10 @@ describe('GamesPage', () => {
       next_word: 'wave',
     });
 
+    // Fake timers throughout so the 60s countdown is driven deterministically;
+    // advanceTimersByTimeAsync(0) flushes the mocked API promises.
+    vi.useFakeTimers();
+
     render(
       <MemoryRouter initialEntries={['/games']}>
         <Routes>
@@ -86,14 +90,14 @@ describe('GamesPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByText('Word Gym'));
+    fireEvent.click(screen.getByRole('button', { name: /word gym/i }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     fireEvent.click(screen.getByRole('button', { name: /play now/i }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
-    await waitFor(() => {
-      expect(apiGetMock).toHaveBeenCalledWith('/games/wordgym/start');
-    });
+    expect(apiGetMock).toHaveBeenCalledWith('/games/wordgym/start');
+    expect(screen.getByText('ocean')).toBeInTheDocument();
 
-    expect(await screen.findByText('ocean')).toBeInTheDocument();
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: 'wave' } });
     fireEvent.keyDown(input, {
@@ -103,22 +107,25 @@ describe('GamesPage', () => {
       charCode: 13,
       which: 13,
     });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
-    await waitFor(() => {
-      expect(apiPostMock).toHaveBeenCalledWith('/games/wordgym/evaluate', {
-        base_word: 'ocean',
-        user_word: 'wave',
-      });
+    expect(apiPostMock).toHaveBeenCalledWith('/games/wordgym/evaluate', {
+      base_word: 'ocean',
+      user_word: 'wave',
     });
-    expect(await screen.findByText('wave')).toBeInTheDocument();
-    expect(screen.getByText('7')).toBeInTheDocument();
+    // "wave" now shows in both the current-word display and the chain history.
+    expect(screen.getAllByText('wave').length).toBeGreaterThan(0);
+    // The accepted word scores +7 in the chain history.
+    expect(screen.getByText('+7')).toBeInTheDocument();
 
-    vi.useFakeTimers();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(61000);
-    });
+    // Run out the 60s clock → game ends and grants the reward once.
+    // The countdown reschedules itself via an effect, so effects must flush
+    // between each second — advance one tick at a time.
+    for (let i = 0; i < 61; i++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    }
 
-    expect(await screen.findByText(/Time's Up!/)).toBeInTheDocument();
+    expect(screen.getByText(/Time's up\./)).toBeInTheDocument();
     expect(grantRewardMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -43,6 +43,10 @@ def get_current_user_id(
 
 CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]
 
+# For endpoints that render a default response when dependency overrides
+# (tests) supply no user. At runtime the dependency itself never yields None.
+OptionalUserId = Annotated[uuid.UUID | None, Depends(get_current_user_id)]
+
 
 async def get_user_engine_pref(
     user_id: CurrentUserId,
@@ -53,8 +57,8 @@ async def get_user_engine_pref(
     try:
         from app.db.models import User
         user = await db.get(User, user_id)
-        prefs: dict = (user.prefs or {}) if user else {}
-        return prefs.get("ai_engine", get_settings().ai_default_engine)
+        prefs: dict[str, Any] = (user.prefs or {}) if user else {}
+        return str(prefs.get("ai_engine", get_settings().ai_default_engine))
     except Exception:
         return get_settings().ai_default_engine
 

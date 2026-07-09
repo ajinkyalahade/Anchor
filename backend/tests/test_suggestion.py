@@ -10,12 +10,12 @@ from app.db.database import get_db
 from app.db.models import RewardState, User
 from app.domain.suggestion.service import first_week_label, pick_next_anchor
 from app.main import app
-from tests.helpers import auth_headers_for
+from tests.helpers import FakeResult, auth_headers_for
 
 
 class FakeSession:
     async def execute(self, statement):
-        return []
+        return FakeResult()
 
     async def get(self, model: type[object], key: uuid.UUID) -> object | None:
         if model is RewardState:

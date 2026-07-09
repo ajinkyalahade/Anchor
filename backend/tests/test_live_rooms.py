@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from app.api import rooms
 from app.core.config import Settings
 from app.main import create_app
-from tests.helpers import auth_headers_for
+from tests.helpers import auth_headers_for, register_test_user
 
 
 @pytest.fixture
@@ -63,6 +63,7 @@ async def test_report_endpoint_exists(app):
 @pytest.mark.asyncio
 async def test_push_subscribe_returns_crash_hour(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _, headers = await register_test_user(client)
         resp = await client.post(
             "/v1/notifications/subscribe",
             json={
@@ -72,7 +73,7 @@ async def test_push_subscribe_returns_crash_hour(app):
                 },
                 "crash_window": "morning",
             },
-            headers=auth_headers_for(uuid.uuid4()),
+            headers=headers,
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -83,6 +84,7 @@ async def test_push_subscribe_returns_crash_hour(app):
 @pytest.mark.asyncio
 async def test_push_subscribe_evening_crash_window(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        _, headers = await register_test_user(client)
         resp = await client.post(
             "/v1/notifications/subscribe",
             json={
@@ -92,7 +94,7 @@ async def test_push_subscribe_evening_crash_window(app):
                 },
                 "crash_window": "evening",
             },
-            headers=auth_headers_for(uuid.uuid4()),
+            headers=headers,
         )
         assert resp.status_code == 200
         assert resp.json()["crash_hour"] == 19

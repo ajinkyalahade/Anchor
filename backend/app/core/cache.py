@@ -31,7 +31,8 @@ class AppCache:
         redis_client = self._redis
         if redis_client is not None:
             try:
-                return await redis_client.get(key)
+                value: str | None = await redis_client.get(key)
+                return value
             except Exception:
                 self._redis = None
 

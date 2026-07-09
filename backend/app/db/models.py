@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -36,8 +37,8 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     plan: Mapped[str] = mapped_column(String(50), default="free")
-    consent_flags: Mapped[dict] = mapped_column(JSONB, default=dict)
-    prefs: Mapped[dict] = mapped_column(JSONB, default=dict)
+    consent_flags: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    prefs: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
     # Relationships
     profile: Mapped["Profile"] = relationship(back_populates="user", uselist=False)
@@ -162,7 +163,7 @@ class UserStateSnapshot(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -380,7 +381,7 @@ class CoachingSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    topics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    topics: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     messages: Mapped[list["CoachingMessage"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
@@ -417,7 +418,8 @@ class UserMemory(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
-    memory_type: Mapped[str] = mapped_column(String(32), nullable=False)  # pattern|preference|milestone|struggle
+    # pattern|preference|milestone|struggle
+    memory_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False)  # coach|rsd|focus|games|manual
     valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -457,9 +459,9 @@ class FocusSession(Base):
     duration_planned: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_actual: Mapped[int | None] = mapped_column(Integer, nullable=True)
     task_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    decomposition_jsonb: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    decomposition_jsonb: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     completed_steps_int: Mapped[int] = mapped_column(Integer, default=0)
-    distractions_jsonb: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    distractions_jsonb: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     mood_before: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     mood_after: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     started_at: Mapped[datetime] = mapped_column(
@@ -482,7 +484,7 @@ class PushSubscription(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
-    subscription: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    subscription: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     crash_window: Mapped[str] = mapped_column(String(20), nullable=False)
     crash_hour: Mapped[int] = mapped_column(Integer, nullable=False)
     registered_at: Mapped[datetime] = mapped_column(

@@ -254,7 +254,9 @@ async def test_expired_token_returns_401() -> None:
         "iat": int(time.time()) - 3600,
         "exp": int(time.time()) - 1800,
     }
-    header_part = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    header_part = _b64url(
+        json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode()
+    )
     payload_part = _b64url(json.dumps(payload, separators=(",", ":")).encode())
     signing_input = f"{header_part}.{payload_part}".encode()
     sig = hmac_lib.new(secret.encode(), signing_input, hashlib.sha256).digest()
