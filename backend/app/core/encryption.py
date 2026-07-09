@@ -18,7 +18,13 @@ def _get_key() -> bytes:
     raw = settings.field_encryption_key
     key_bytes = base64.b64decode(raw) if raw else b""
     if len(key_bytes) != _KEY_BYTES:
-        # Dev fallback: deterministic zero key — never use in prod
+        if settings.app_env == "production":
+            # Settings validation should have caught this at boot; refuse
+            # to "encrypt" production data with a known key regardless.
+            raise RuntimeError(
+                "FIELD_ENCRYPTION_KEY is missing or invalid in production"
+            )
+        # Dev fallback: deterministic zero key — never used in prod
         key_bytes = b"\x00" * _KEY_BYTES
     return key_bytes
 

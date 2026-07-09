@@ -1,8 +1,18 @@
 """Anchor backend — core configuration."""
 
+import base64
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+_INSECURE_SECRETS = {
+    "",
+    "change-me-in-production",
+    "dev-secret-not-for-production",
+    "dev-magic-not-for-production",
+}
+_MIN_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -60,6 +70,45 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
+
+    @model_validator(mode="after")
+    def _refuse_insecure_production_config(self) -> "Settings":
+        """Fail fast at boot rather than run production traffic on dev secrets."""
+        if self.app_env != "production":
+            return self
+
+        problems: list[str] = []
+        if self.app_debug:
+            problems.append("APP_DEBUG must be false in production")
+        if self.jwt_secret in _INSECURE_SECRETS or len(self.jwt_secret) < _MIN_SECRET_LENGTH:
+            problems.append(
+                f"JWT_SECRET must be a strong random value (>= {_MIN_SECRET_LENGTH} chars)"
+            )
+        if (
+            self.magic_link_secret in _INSECURE_SECRETS
+            or len(self.magic_link_secret) < _MIN_SECRET_LENGTH
+        ):
+            problems.append(
+                f"MAGIC_LINK_SECRET must be a strong random value (>= {_MIN_SECRET_LENGTH} chars)"
+            )
+        if not self._has_valid_encryption_key():
+            problems.append(
+                "FIELD_ENCRYPTION_KEY must be base64-encoded 32 random bytes"
+            )
+
+        if problems:
+            raise ValueError(
+                "Refusing to start with insecure production configuration: "
+                + "; ".join(problems)
+            )
+        return self
+
+    def _has_valid_encryption_key(self) -> bool:
+        try:
+            key = base64.b64decode(self.field_encryption_key, validate=True)
+        except (ValueError, TypeError):
+            return False
+        return len(key) == 32 and key != b"\x00" * 32
 
 
 @lru_cache
