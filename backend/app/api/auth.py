@@ -17,12 +17,22 @@ from app.core.auth import (
     verify_password,
 )
 from app.core.config import get_settings
+from app.core.rate_limit import build_ip_rate_limit_dependency
 from app.db.database import get_db
 from app.db.models import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+# IP-based limits for unauthenticated endpoints: throttle password guessing
+# and unauthenticated row creation (DB-fill DoS).
+login_rate_limit = build_ip_rate_limit_dependency(
+    "auth-login", max_requests=10, window_seconds=60
+)
+register_rate_limit = build_ip_rate_limit_dependency(
+    "auth-register", max_requests=5, window_seconds=60
+)
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +43,7 @@ class RegisterPayload(BaseModel):
     email: str
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
 
     @field_validator("email")
     @classmethod
@@ -79,6 +89,7 @@ class AuthResponse(BaseModel):
     "/register",
     response_model=AuthResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(register_rate_limit)],
 )
 async def register(
     payload: RegisterPayload,
@@ -123,6 +134,7 @@ async def register(
 @router.post(
     "/login",
     response_model=AuthResponse,
+    dependencies=[Depends(login_rate_limit)],
 )
 async def login(
     payload: LoginPayload,
@@ -165,6 +177,7 @@ async def login(
     "/register-anonymous",
     response_model=AuthResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(register_rate_limit)],
 )
 async def register_anonymous(
     response: Response,
@@ -191,6 +204,16 @@ async def register_anonymous(
         access_token=access_token,
         expires_at=datetime.fromtimestamp(access_expiry, UTC),
     )
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(response: Response) -> dict[str, str]:
+    """Clear the session cookie. Bearer tokens held by the client should be
+    discarded client-side; server-side revocation of stateless JWTs would
+    require a denylist (tracked separately)."""
+    response.headers["Cache-Control"] = "no-store"
+    response.delete_cookie(key="anchor_session", path="/", samesite="strict")
+    return {"status": "logged_out"}
 
 
 # ---------------------------------------------------------------------------

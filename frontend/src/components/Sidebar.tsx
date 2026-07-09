@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { logout } from '../lib/account';
 
 interface RewardsSummary {
   total_xp: number;
@@ -232,10 +233,9 @@ export default function Sidebar() {
           </div>
           <button
             onClick={() => {
-              localStorage.removeItem('anchor_token');
-              localStorage.removeItem('anchor_user_id');
-              localStorage.removeItem('anchor_first_name');
-              window.location.href = '/login';
+              void logout().finally(() => {
+                window.location.href = '/login';
+              });
             }}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,

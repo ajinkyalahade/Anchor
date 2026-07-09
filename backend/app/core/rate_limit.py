@@ -64,20 +64,53 @@ def build_rate_limit_dependency(
         request: Request,
         user_id: CurrentUserId,
     ) -> None:
-        limiter: RateLimiter | None = getattr(request.app.state, "rate_limiter", None)
-        if limiter is None:
-            return
-
-        retry_after = await limiter.hit(
-            f"rate-limit:{bucket}:{user_id}",
-            max_requests=max_requests,
-            window_seconds=window_seconds,
-        )
-        if retry_after is not None:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="rate_limited",
-                headers={"Retry-After": str(retry_after)},
-            )
+        await _enforce(request, f"rate-limit:{bucket}:{user_id}", max_requests, window_seconds)
 
     return dependency
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort client IP. Honors X-Forwarded-For's first hop when set by
+    a trusted proxy (nginx sets it in this deployment); falls back to the
+    socket peer."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def build_ip_rate_limit_dependency(
+    bucket: str,
+    *,
+    max_requests: int,
+    window_seconds: int,
+) -> Callable[[Request], Awaitable[None]]:
+    """Rate limit by client IP — for unauthenticated routes (login, register,
+    onboarding) where there is no user id to key on."""
+
+    async def dependency(request: Request) -> None:
+        await _enforce(
+            request,
+            f"rate-limit:{bucket}:{_client_ip(request)}",
+            max_requests,
+            window_seconds,
+        )
+
+    return dependency
+
+
+async def _enforce(
+    request: Request, key: str, max_requests: int, window_seconds: int
+) -> None:
+    limiter: RateLimiter | None = getattr(request.app.state, "rate_limiter", None)
+    if limiter is None:
+        return
+    retry_after = await limiter.hit(
+        key, max_requests=max_requests, window_seconds=window_seconds
+    )
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="rate_limited",
+            headers={"Retry-After": str(retry_after)},
+        )
