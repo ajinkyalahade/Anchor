@@ -60,7 +60,7 @@ async def test_account_deletion_can_be_scheduled() -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/v1/account/deletion",
-                json={"user_id": str(user.id), "deletion_mode": "scheduled"},
+                json={"deletion_mode": "scheduled"},
                 headers=auth_headers_for(user.id),
             )
     finally:
@@ -99,7 +99,7 @@ async def test_account_deletion_can_hard_delete_immediately() -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/v1/account/deletion",
-                json={"user_id": str(user.id), "deletion_mode": "immediate"},
+                json={"deletion_mode": "immediate"},
                 headers=auth_headers_for(user.id),
             )
     finally:
@@ -130,7 +130,7 @@ async def test_account_deletion_rejects_unknown_user() -> None:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/v1/account/deletion",
-                json={"user_id": str(uuid.uuid4()), "deletion_mode": "immediate"},
+                json={"deletion_mode": "immediate"},
                 headers=auth_headers_for(uuid.uuid4()),
             )
     finally:
@@ -138,3 +138,36 @@ async def test_account_deletion_rejects_unknown_user() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found"
+
+
+@pytest.mark.asyncio
+async def test_account_deletion_ignores_user_id_in_payload() -> None:
+    """Regression (SEC-1): deletion must target the token's user; a user_id
+    smuggled into the payload must never select the deletion target."""
+    fake_session = FakeSession()
+    attacker = User(id=uuid.uuid4())
+    victim = User(id=uuid.uuid4())
+    fake_session.add(attacker)
+    fake_session.add(victim)
+
+    async def override_get_db():
+        yield fake_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/v1/account/deletion",
+                json={"user_id": str(victim.id), "deletion_mode": "immediate"},
+                headers=auth_headers_for(attacker.id),
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    # The victim is untouched; only the attacker's own account was deleted.
+    assert victim.id in fake_session.users
+    assert attacker.id not in fake_session.users
+    assert fake_session.deletion_requests[0].target_user_id == attacker.id

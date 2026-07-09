@@ -1,6 +1,5 @@
 """Account lifecycle endpoints."""
 
-import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
@@ -18,7 +17,6 @@ DELETION_GRACE_PERIOD_DAYS = 30
 
 
 class AccountDeletionPayload(BaseModel):
-    user_id: uuid.UUID
     deletion_mode: Literal["scheduled", "immediate"]
     reason: str | None = Field(default=None, max_length=255)
 
@@ -89,9 +87,12 @@ async def get_preferences(
 )
 async def request_account_deletion(
     payload: AccountDeletionPayload,
+    user_id: CurrentUserId,
     db: DbSession,
 ) -> AccountDeletionResponse:
-    user = await db.get(User, payload.user_id)
+    # Deletion always targets the authenticated user — the token is the
+    # only acceptable proof of who is being deleted.
+    user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -100,7 +101,7 @@ async def request_account_deletion(
         scheduled_for = now + timedelta(days=DELETION_GRACE_PERIOD_DAYS)
         db.add(
             AccountDeletionRequest(
-                target_user_id=payload.user_id,
+                target_user_id=user_id,
                 deletion_mode="scheduled",
                 status="pending",
                 reason=payload.reason,
@@ -118,7 +119,7 @@ async def request_account_deletion(
 
     db.add(
         AccountDeletionRequest(
-            target_user_id=payload.user_id,
+            target_user_id=user_id,
             deletion_mode="immediate",
             status="completed",
             reason=payload.reason,

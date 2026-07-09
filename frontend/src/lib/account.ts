@@ -13,13 +13,8 @@ export interface AccountDeletionResponse {
 export async function requestAccountDeletion(
   deletionMode: AccountDeletionMode,
 ): Promise<AccountDeletionResponse> {
-  const userId = window.localStorage.getItem('anchor_user_id');
-  if (!userId) {
-    throw new Error('No active account');
-  }
-
+  // The backend deletes the account of the authenticated user (bearer token).
   return api.post<AccountDeletionResponse>('/account/deletion', {
-    user_id: userId,
     deletion_mode: deletionMode,
     reason: 'user_requested',
   });

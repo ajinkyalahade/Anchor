@@ -163,3 +163,55 @@ async def test_post_replays_from_cache_after_memory_store_is_cleared() -> None:
     assert first.json() == second.json()
     assert second.headers["x-idempotent-replayed"] == "true"
     assert len(fake_session.objects) == 2
+
+
+@pytest.mark.asyncio
+async def test_idempotency_key_is_scoped_per_caller() -> None:
+    """Regression (SEC-2): the same Idempotency-Key from two different callers
+    must never replay the first caller's response to the second."""
+    fake_session = FakeSession()
+    app.state.idempotency_store.clear()
+    original_cache = app.state.cache
+    app.state.cache = AppCache("redis://localhost:6379/99")
+
+    async def override_get_db():
+        yield fake_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    payload = {
+        "deficit_tags": ["EF", "TB"],
+        "crash_window": "Afternoon",
+        "vibe_pref": "focused",
+    }
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            first = await client.post(
+                "/v1/onboarding",
+                json=payload,
+                headers={
+                    "Idempotency-Key": "shared-key",
+                    "Authorization": "Bearer caller-a-token",
+                },
+            )
+            second = await client.post(
+                "/v1/onboarding",
+                json=payload,
+                headers={
+                    "Idempotency-Key": "shared-key",
+                    "Authorization": "Bearer caller-b-token",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+        app.state.idempotency_store.clear()
+        app.state.cache = original_cache
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    # Different callers → independent responses, never a cross-caller replay.
+    assert "x-idempotent-replayed" not in second.headers
+    assert first.json()["user_id"] != second.json()["user_id"]
+    # Two users + two profiles were actually created.
+    assert len(fake_session.objects) == 4

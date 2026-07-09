@@ -40,7 +40,11 @@ class IdempotencyKeyMiddleware(BaseHTTPMiddleware):
         body = await request.body()
         request_hash = hashlib.sha256(body).hexdigest()
         store = _get_store(request)
-        cache_key = _build_cache_key(request.url.path, idempotency_key)
+        cache_key = _build_cache_key(
+            request.url.path,
+            idempotency_key,
+            _caller_scope(request),
+        )
         existing = store.get(cache_key) or await _load_cached_response(request, cache_key)
 
         if existing is not None:
@@ -105,8 +109,19 @@ def _filter_headers(headers: dict[str, str] | Any) -> dict[str, str]:
     }
 
 
-def _build_cache_key(path: str, idempotency_key: str) -> str:
-    return f"idempotency:{path}:{idempotency_key}"
+def _caller_scope(request: Request) -> str:
+    """Identity scope for the cache key so callers can never replay each
+    other's responses. Uses a hash of the bearer credentials; requests
+    without credentials share an anonymous scope (keys are client-generated
+    random UUIDs, so accidental collisions are not a concern there)."""
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        return "anon"
+    return hashlib.sha256(authorization.encode()).hexdigest()
+
+
+def _build_cache_key(path: str, idempotency_key: str, caller_scope: str) -> str:
+    return f"idempotency:{caller_scope}:{path}:{idempotency_key}"
 
 
 async def _load_cached_response(
