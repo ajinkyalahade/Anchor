@@ -1,0 +1,90 @@
+/*
+ * Approved typographic scale (use only these Tailwind text-* classes):
+ *   text-[10px]  — micro labels, badges, tracking-widest caps
+ *   text-xs      — 12px — secondary meta, timestamps
+ *   text-sm      — 14px — body copy, card descriptions
+ *   text-base    — 16px — default (set on html)
+ *   text-lg      — 18px — section subheadings
+ *   text-xl      — 20px — page subheadings
+ *   text-2xl     — 24px — page headings
+ *   text-3xl     — 30px — hero/feature headings
+ *   text-4xl     — 36px — large display numbers (timers, XP)
+ * Do not introduce other sizes without updating this list.
+ */
+
+@theme {
+  /* ── Core palette (design system) ── */
+  --color-bg-canvas: #F5F0E7;
+  --color-bg-surface: #FBF8F2;
+  --color-bg-surface-2: #EFE9DD;
+  --color-text-primary: #2A2620;
+  --color-text-muted: #6E665A;
+
+  /* ── Accent palette ── */
+  --color-accent-focus: oklch(0.72 0.055 235);
+  --color-accent-calm: oklch(0.76 0.045 150);
+  --color-accent-spark: oklch(0.78 0.085 75);
+  --color-accent-warm: oklch(0.72 0.075 28);
+  --color-accent-lilac: oklch(0.74 0.055 295);
+  --color-accent-rsd: oklch(0.72 0.075 28);
+
+  /* ── Typography ── */
+  --font-display: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* ── Motion ── */
+  --duration-standard: 200ms;
+  --duration-state: 400ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Elevation ── */
+  --shadow-xs: 0 1px 0 rgba(42,38,32,0.04), 0 1px 2px rgba(42,38,32,0.04);
+  --shadow-sm: 0 1px 0 rgba(42,38,32,0.04), 0 1px 2px rgba(42,38,32,0.04);
+  --shadow-md: 0 1px 0 rgba(42,38,32,0.04), 0 4px 12px -4px rgba(42,38,32,0.08);
+  --shadow-lg: 0 1px 0 rgba(42,38,32,0.04), 0 8px 24px -8px rgba(42,38,32,0.10);
+  --shadow-xl: 0 1px 0 rgba(42,38,32,0.04), 0 20px 48px -12px rgba(42,38,32,0.14);
+}
+
+/* ── Design token aliases (used directly in components) ── */
+:root {
+  --bone:           #F5F0E7;
+  --bone-soft:      #EFE9DD;
+  --bone-deep:      #E8E1D2;
+  --paper:          #FBF8F2;
+  --ink:            #2A2620;
+  --ink-2:          #4A4339;
+  --ink-3:          #6E665A;
+  --ink-4:          #9A9081;
+  --hairline:       rgba(42, 38, 32, 0.10);
+  --hairline-strong:rgba(42, 38, 32, 0.18);
+
+  --focus:          oklch(0.72 0.055 235);
+  --focus-ink:      oklch(0.42 0.06 235);
+  --focus-wash:     oklch(0.93 0.025 235);
+
+  --calm:           oklch(0.76 0.045 150);
+  --calm-ink:       oklch(0.42 0.055 155);
+  --calm-wash:      oklch(0.94 0.025 150);
+
+  --reward:         oklch(0.78 0.085 75);
+  --reward-ink:     oklch(0.48 0.085 65);
+  --reward-wash:    oklch(0.94 0.04 75);
+
+  --games:          oklch(0.74 0.055 295);
+  --games-ink:      oklch(0.44 0.07 295);
+  --games-wash:     oklch(0.93 0.025 295);
+
+  --rsd:            oklch(0.72 0.075 28);
+  --rsd-ink:        oklch(0.44 0.085 28);
+  --rsd-wash:       oklch(0.93 0.035 28);
+
+  --r-sm:   8px;
+  --r:      14px;
+  --r-lg:   20px;
+  --r-xl:   28px;
+
+  --serif: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+  --sans:  -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --mono:  'JetBrains Mono', ui-monospace, monospace;
+}

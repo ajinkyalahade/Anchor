@@ -1,0 +1,20 @@
+{
+  "calm": {
+    "crisis": {
+      "not_alone": "You are not alone.",
+      "message": "It sounds like you are going through a really difficult time right now. Please know you aren't alone.",
+      "resources": [
+        {
+          "name": "988 Suicide & Crisis Lifeline",
+          "number": "988",
+          "region": "US/Canada"
+        },
+        {
+          "name": "Crisis Text Line",
+          "number": "741741",
+          "region": "US/Canada/UK/Ireland"
+        }
+      ]
+    }
+  }
+}

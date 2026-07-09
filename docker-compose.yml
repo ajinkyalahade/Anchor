@@ -1,0 +1,70 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: anchor-db
+    environment:
+      POSTGRES_DB: anchor
+      POSTGRES_USER: anchor
+      POSTGRES_PASSWORD: anchor_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anchor"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: anchor-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: anchor-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://anchor:anchor_dev@db:5432/anchor
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:4173,http://127.0.0.1:4173
+      JWT_SECRET: change-me-in-production
+      MAGIC_LINK_SECRET: change-me-in-production
+      AI_DEFAULT_ENGINE: ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_FAST_MODEL: qwen3.5:2b
+      OLLAMA_REASONING_MODEL: qwen3.5:2b
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: anchor-frontend
+    environment:
+      VITE_API_URL: http://anchor-backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "4173:4173"
+
+volumes:
+  pgdata:

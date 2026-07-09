@@ -1,0 +1,20 @@
+{
+  "calm": {
+    "crisis": {
+      "not_alone": "No estás solo.",
+      "message": "Parece que estás pasando por un momento muy difícil. Por favor, ten en cuenta que no estás solo.",
+      "resources": [
+        {
+          "name": "Línea de Atención a la Conducta Suicida",
+          "number": "024",
+          "region": "España"
+        },
+        {
+          "name": "Línea de la Vida",
+          "number": "800 911 2000",
+          "region": "México"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.local
+
+# Local credentials — never commit
+creds.md
+
+# Build output
+dist/
+build/
+storybook-static/
+.tmp-*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test coverage
+coverage/
+htmlcov/
+.pytest_cache/
+
+# Tooling artifacts
+.playwright-mcp/
+.claude/settings.local.json
+.mypy_cache/
+.ruff_cache/
