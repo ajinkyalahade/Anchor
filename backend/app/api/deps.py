@@ -3,17 +3,19 @@ import uuid
 from typing import Annotated, Any
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.token_revocation import is_token_revoked
 from app.db.database import get_db
 
 security = HTTPBearer()
 
 
-def get_current_user_id(
+async def get_current_user_id(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
 ) -> uuid.UUID:
     token = credentials.credentials
@@ -29,7 +31,6 @@ def get_current_user_id(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="token_invalid",
             )
-        return uuid.UUID(user_id_str)
     except jwt.ExpiredSignatureError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,6 +41,15 @@ def get_current_user_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="token_invalid",
         ) from err
+
+    # Reject tokens that have been explicitly revoked (e.g. via logout).
+    cache = getattr(request.app.state, "cache", None)
+    if await is_token_revoked(cache, payload.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token_revoked",
+        )
+    return uuid.UUID(user_id_str)
 
 CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]
 

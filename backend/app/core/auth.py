@@ -70,7 +70,11 @@ def hash_magic_link_token(token: str, secret: str) -> str:
 # ---------------------------------------------------------------------------
 
 def build_access_token(*, user_id: str, email: str | None, secret: str) -> tuple[str, int]:
-    """Return a signed bearer token plus its expiry timestamp."""
+    """Return a signed bearer token plus its expiry timestamp.
+
+    Every token carries a unique ``jti`` so it can be individually revoked
+    (see app.core.token_revocation).
+    """
     now = int(time.time())
     expires_at = now + ACCESS_TOKEN_TTL_SECONDS
     payload: dict[str, Any] = {
@@ -78,6 +82,7 @@ def build_access_token(*, user_id: str, email: str | None, secret: str) -> tuple
         "email": email,
         "iat": now,
         "exp": expires_at,
+        "jti": secrets.token_urlsafe(16),
     }
     return _encode_jwt(payload, secret), expires_at
 

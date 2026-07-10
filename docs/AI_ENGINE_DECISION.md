@@ -1,6 +1,27 @@
 # AI Engine — Production Decision (AI-2)
 
-_Status: **OPEN — requires a product/infra decision before launch.**_
+_Status: **DECIDED (2026-07-09): launch on the Anthropic hosted API.**_
+
+## Decision
+
+Production runs on **Anthropic (hosted Claude)** — `AI_DEFAULT_ENGINE=anthropic`
+with a real `ANTHROPIC_API_KEY`. Rationale: the engine is already implemented
+and needs zero model ops; small local models materially underperform on the
+coach and RSD-support quality that is the app's core value; and hosted Claude
+is the quality ceiling. Local Ollama remains the default for local development
+only (`docker-compose` and `.env`), where cost and data residency don't apply.
+
+Follow-ups that this decision creates (tracked, not blocking the choice):
+- Wire **consent gating** (DATA-4) before sending user text to the provider.
+- Add an **alert** on `overall_fallback_rate > 0.05` (5 min) from `GET /v1/metrics/ai`.
+- Provision `ANTHROPIC_API_KEY` in the production secret store.
+
+See `.env.production.example` for the production-oriented settings that
+operationalize this.
+
+---
+
+## Background (why this needed deciding)
 
 ## The problem
 

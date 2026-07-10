@@ -5,7 +5,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,7 @@ from app.core.auth import (
 )
 from app.core.config import get_settings
 from app.core.rate_limit import build_ip_rate_limit_dependency
+from app.core.token_revocation import revoke_token
 from app.db.database import get_db
 from app.db.models import User
 
@@ -207,13 +209,36 @@ async def register_anonymous(
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(response: Response) -> dict[str, str]:
-    """Clear the session cookie. Bearer tokens held by the client should be
-    discarded client-side; server-side revocation of stateless JWTs would
-    require a denylist (tracked separately)."""
+async def logout(request: Request, response: Response) -> dict[str, str]:
+    """Clear the session cookie and revoke the presented access token so it
+    cannot be reused (server-side revocation via the token denylist)."""
     response.headers["Cache-Control"] = "no-store"
     response.delete_cookie(key="anchor_session", path="/", samesite="strict")
+
+    token = _bearer_or_cookie_token(request)
+    if token:
+        try:
+            # Decode without verifying expiry so an already-borderline token
+            # is still revoked; signature is still checked.
+            claims = jwt.decode(
+                token,
+                get_settings().jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_exp": False},
+            )
+            cache = getattr(request.app.state, "cache", None)
+            await revoke_token(cache, claims.get("jti"), claims.get("exp"))
+        except jwt.InvalidTokenError:
+            pass  # nothing to revoke on a bad token
+
     return {"status": "logged_out"}
+
+
+def _bearer_or_cookie_token(request: Request) -> str | None:
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth.removeprefix("Bearer ").strip()
+    return request.cookies.get("anchor_session")
 
 
 # ---------------------------------------------------------------------------
