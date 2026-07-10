@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production"
     magic_link_secret: str = "change-me-in-production"
 
+    # Email (password reset). Empty smtp_host → console sender (dev).
+    email_from: str = "noreply@anchor.app"
+    email_from_name: str = "Anchor"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+    public_app_url: str = "http://localhost:4173"
+
     # Ollama (local AI)
     ollama_base_url: str = "http://localhost:11434"
     ollama_fast_model: str = "qwen3.5:2b"

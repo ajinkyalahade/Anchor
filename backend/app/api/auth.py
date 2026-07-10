@@ -2,7 +2,7 @@
 """Email + password authentication endpoints."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import jwt
@@ -14,14 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import (
     ACCESS_TOKEN_TTL_SECONDS,
     build_access_token,
+    generate_magic_link_token,
+    hash_magic_link_token,
     hash_password,
     verify_password,
 )
 from app.core.config import get_settings
+from app.core.email import get_email_sender
 from app.core.rate_limit import build_ip_rate_limit_dependency
 from app.core.token_revocation import revoke_token
 from app.db.database import get_db
-from app.db.models import User
+from app.db.models import AuthMagicLink, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -239,6 +242,117 @@ def _bearer_or_cookie_token(request: Request) -> str | None:
     if auth.startswith("Bearer "):
         return auth.removeprefix("Bearer ").strip()
     return request.cookies.get("anchor_session")
+
+
+# ---------------------------------------------------------------------------
+# Password reset
+# ---------------------------------------------------------------------------
+
+PASSWORD_RESET_TTL_SECONDS = 30 * 60
+
+password_reset_rate_limit = build_ip_rate_limit_dependency(
+    "auth-password-reset", max_requests=5, window_seconds=60
+)
+
+
+class PasswordResetRequestPayload(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class PasswordResetConfirmPayload(BaseModel):
+    token: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@router.post(
+    "/password-reset/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(password_reset_rate_limit)],
+)
+async def request_password_reset(
+    payload: PasswordResetRequestPayload,
+    response: Response,
+    db: DbSession,
+) -> dict[str, str]:
+    """Begin a password reset. Always returns 202 with the same body so the
+    endpoint can't be used to discover which emails have accounts."""
+    response.headers["Cache-Control"] = "no-store"
+    settings = get_settings()
+
+    user = await _get_user_by_email(db, payload.email)
+    if user is not None and user.password_hash is not None and user.email:
+        raw_token = generate_magic_link_token()
+        link = AuthMagicLink(
+            user_id=user.id,
+            email=user.email,
+            token_hash=hash_magic_link_token(raw_token, settings.magic_link_secret),
+            expires_at=datetime.now(UTC) + timedelta(seconds=PASSWORD_RESET_TTL_SECONDS),
+        )
+        db.add(link)
+        await db.flush()
+
+        reset_url = f"{settings.public_app_url}/auth/reset?token={raw_token}"
+        sender = get_email_sender(settings)
+        await sender.send(
+            to=user.email,
+            subject="Reset your Anchor password",
+            body=(
+                "You (or someone) asked to reset your Anchor password.\n\n"
+                f"Reset it here (expires in 30 minutes):\n{reset_url}\n\n"
+                "If this wasn't you, you can ignore this email."
+            ),
+        )
+
+    return {"status": "if_the_account_exists_an_email_was_sent"}
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_200_OK)
+async def confirm_password_reset(
+    payload: PasswordResetConfirmPayload,
+    response: Response,
+    db: DbSession,
+) -> dict[str, str]:
+    """Complete a password reset using the token from the email."""
+    response.headers["Cache-Control"] = "no-store"
+    settings = get_settings()
+    token_hash = hash_magic_link_token(payload.token, settings.magic_link_secret)
+
+    result = await db.execute(
+        select(AuthMagicLink).where(AuthMagicLink.token_hash == token_hash)
+    )
+    link = result.scalar_one_or_none()
+
+    now = datetime.now(UTC)
+    if (
+        link is None
+        or link.consumed_at is not None
+        or _as_utc(link.expires_at) < now
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired.",
+        )
+
+    user = await db.get(User, link.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired.",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    link.consumed_at = now
+    await db.flush()
+    return {"status": "password_reset"}
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
