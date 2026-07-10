@@ -12,6 +12,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.core.config import get_settings
+from app.core.observability import request_id_var
 
 logger = logging.getLogger("anchor.http")
 
@@ -20,11 +21,19 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        request_id = str(uuid.uuid4())
+        # Source of truth for the per-request id: honor an inbound
+        # X-Request-Id (e.g. from a load balancer) or mint one, and publish
+        # it so every log line in this request — and the audit log — shares it.
+        request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+        token = request_id_var.set(request_id)
+        request.state.request_id = request_id
         start = time.monotonic()
         user_id = _extract_user_id(request)
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_var.reset(token)
         duration_ms = int((time.monotonic() - start) * 1000)
 
         payload = {

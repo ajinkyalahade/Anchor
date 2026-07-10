@@ -19,6 +19,12 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     settings = get_settings()
 
+    # Observability first, so startup itself is logged/tracked (OBS-1/2).
+    from app.core.observability import configure_logging, init_error_tracking
+
+    configure_logging(level=settings.log_level, json_logs=settings.log_json)
+    init_error_tracking(dsn=settings.sentry_dsn, environment=settings.app_env)
+
     app = FastAPI(
         title="Anchor API",
         description=(
@@ -83,7 +89,38 @@ def create_app() -> FastAPI:
     app.include_router(ai_router, prefix="/v1", dependencies=auth_dep)
     app.include_router(wearable_router, prefix="/v1", dependencies=auth_dep)
 
+    _register_exception_handler(app)
+
     return app
+
+
+def _register_exception_handler(app: FastAPI) -> None:
+    """Log unhandled exceptions with the request id and forward them to error
+    tracking, so a 500 is never silent (OBS-1)."""
+    import logging
+
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+
+    from app.core.observability import capture_exception, request_id_var
+
+    logger = logging.getLogger("anchor.error")
+
+    @app.exception_handler(Exception)
+    async def _handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
+        request_id = request_id_var.get() or "-"
+        logger.exception(
+            "unhandled_exception method=%s path=%s request_id=%s",
+            request.method,
+            request.url.path,
+            request_id,
+        )
+        capture_exception(exc)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Something went wrong. Please try again."},
+            headers={"X-Request-Id": request_id},
+        )
 
 
 app = create_app()

@@ -2,10 +2,11 @@
 
 import logging
 import time
-import uuid
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+
+from app.core.observability import request_id_var
 
 logger = logging.getLogger("anchor.audit")
 
@@ -26,18 +27,31 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if not any(request.url.path.startswith(p) for p in _SENSITIVE_PREFIXES):
             return await call_next(request)
 
-        request_id = str(uuid.uuid4())
+        # Reuse the per-request id set by RequestLoggingMiddleware so an audit
+        # line can be correlated with the full request log.
+        request_id = request_id_var.get() or getattr(
+            request.state, "request_id", "-"
+        )
+        user_id = _audit_user_id(request)
         start = time.monotonic()
         response = await call_next(request)
         latency_ms = int((time.monotonic() - start) * 1000)
 
+        # user_id is what makes this an audit trail — "who accessed what".
         logger.info(
-            "audit method=%s path=%s status=%d latency_ms=%d request_id=%s",
+            "audit method=%s path=%s status=%d latency_ms=%d user_id=%s request_id=%s",
             request.method,
             request.url.path,
             response.status_code,
             latency_ms,
+            user_id,
             request_id,
         )
-        response.headers["X-Request-Id"] = request_id
+        response.headers.setdefault("X-Request-Id", request_id)
         return response
+
+
+def _audit_user_id(request: Request) -> str:
+    from app.core.request_logging import _extract_user_id
+
+    return _extract_user_id(request) or "anonymous"

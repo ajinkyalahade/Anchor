@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     otlp_endpoint: str = ""
     otlp_service_name: str = "anchor-backend"
     metrics_enabled: bool = True
+    log_level: str = "INFO"
+    log_json: bool = True  # structured JSON logs; set false for human-readable dev logs
+    sentry_dsn: str = ""  # error tracking; empty = disabled
 
     # Push notifications (VAPID)
     vapid_private_key: str = ""

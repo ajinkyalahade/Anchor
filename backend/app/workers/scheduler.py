@@ -45,10 +45,11 @@ async def run_forever() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    from app.core.config import get_settings
+    from app.core.observability import configure_logging
+
+    settings = get_settings()
+    configure_logging(level=settings.log_level, json_logs=settings.log_json)
     asyncio.run(run_forever())
 
 
