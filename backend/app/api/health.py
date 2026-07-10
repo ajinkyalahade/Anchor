@@ -40,3 +40,16 @@ async def health_check(request: Request) -> HealthResponse:
 
     overall = "ok" if db_status == "ok" and redis_status == "ok" else "degraded"
     return HealthResponse(status=overall, version="0.1.0", db=db_status, redis=redis_status)
+
+
+@router.get("/metrics/ai")
+async def ai_metrics() -> dict[str, object]:
+    """AI call/fallback counters for scraping and alerting (AI-1).
+
+    A rising ``overall_fallback_rate`` means the AI provider is failing or
+    returning unparseable output and users are silently getting canned
+    responses. Unauthenticated so a metrics collector can scrape it.
+    """
+    from app.ai.metrics import snapshot
+
+    return snapshot()

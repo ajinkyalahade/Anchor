@@ -210,15 +210,19 @@ async def route(
     engine = await _resolve_engine(task.value, engine_pref)
     engine_name = type(engine).__name__
 
+    from app.ai.metrics import record_call
+
     try:
         from app.core.telemetry import get_tracer
         tracer = get_tracer()
         with tracer.start_as_current_span(f"ai.{task.value}"):
             result = await _dispatch(task, payload, context, engine)
         _log("ai_call", task, engine_name, start)
+        record_call(task.value, engine_name, fallback=False)
         return result
     except Exception as exc:
         _log("ai_fallback", task, engine_name, start, error=str(exc))
+        record_call(task.value, engine_name, fallback=True)
         return dict(_FALLBACKS[task])
 
 

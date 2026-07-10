@@ -48,6 +48,26 @@ CRISIS_PHRASES = [
     "hurt myself again",
 ]
 
+# Spanish crisis phrases — the app ships an es locale, so these must catch too.
+SPANISH_CRISIS_PHRASES = [
+    "quiero morirme",
+    "me quiero morir",
+    "quiero morir",
+    "no quiero vivir",
+    "no quiero seguir vivir",
+    "quiero matarme",
+    "voy a quitarme la vida",
+    "quiero acabar con mi vida",
+    "quiero acabar con todo",
+    "tengo pensamientos suicidas",
+    "me siento suicida",
+    "quiero estar muerto",
+    "estarían mejor sin mí",
+    "quiero hacerme daño",
+    "quiero cortarme",
+    "tomé demasiadas pastillas",
+]
+
 # Phrases that must NOT trigger the crisis classifier (false-positive check)
 SAFE_PHRASES = [
     "I'm really stressed about this deadline",
@@ -61,12 +81,22 @@ SAFE_PHRASES = [
     "I feel like giving up on this project",  # "giving up" on a thing, not life
     "I'm dying of boredom",                   # colloquial, not literal
     "This is killing my productivity",         # figurative
+    # Spanish safe phrases — must not false-positive.
+    "estoy muy estresado con esto",
+    "me siento abrumado hoy",
+    "necesito un descanso",
+    "me muero de aburrimiento",  # colloquial, not literal
 ]
 
 
 @pytest.mark.parametrize("phrase", CRISIS_PHRASES)
 def test_crisis_classifier_catches_phrase(phrase: str) -> None:
     assert check_crisis(phrase), f"MISSED crisis phrase: {phrase!r}"
+
+
+@pytest.mark.parametrize("phrase", SPANISH_CRISIS_PHRASES)
+def test_crisis_classifier_catches_spanish_phrase(phrase: str) -> None:
+    assert check_crisis(phrase), f"MISSED Spanish crisis phrase: {phrase!r}"
 
 
 @pytest.mark.parametrize("phrase", SAFE_PHRASES)

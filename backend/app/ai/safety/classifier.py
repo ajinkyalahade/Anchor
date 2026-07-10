@@ -7,6 +7,7 @@ import re
 # For MVP, we use aggressive regex patterns.
 
 CRISIS_KEYWORDS = [
+    # ── English ───────────────────────────────────────────────────────────
     # Suicidal ideation — direct
     r"\b(suicide|suicidal)\b",
     r"\b(kill myself|killing myself)\b",
@@ -21,6 +22,19 @@ CRISIS_KEYWORDS = [
     r"\b(overdose|overdosing)\b",
     r"\b(too many pills|stockpiling pills)\b",
     r"\b(thinking about dying|thinking about death)\b",
+    # ── Spanish (the app ships an es locale) ──────────────────────────────
+    # Ideación suicida (suicidio, suicida, suicidas, suicidarme, …)
+    r"\bsuicid\w*",
+    r"\bquiero morir(?:me)?\b",
+    r"\bme quiero morir\b",
+    r"\b(quiero|deseo) (?:estar )?muert[oa]\b",
+    r"\bno quiero (?:seguir )?vivir\b",
+    r"\b(matarme|quitarme la vida|acabar con mi vida|acabar con todo)\b",
+    r"\bmejor sin m[ií]\b",
+    # Autolesión
+    r"\b(hacerme da[ñn]o|lastimarme|cortarme|me corto)\b",
+    # Sobredosis
+    r"\b(sobredosis|demasiadas pastillas)\b",
 ]
 
 CRISIS_REGEX = re.compile("|".join(CRISIS_KEYWORDS), re.IGNORECASE)
@@ -49,6 +63,13 @@ CRISIS_RESPONSE_PAYLOAD = {
             "number": "741741",
             "action": "Text HOME",
             "region": "US/Canada/UK/Ireland"
+        },
+        {
+            # International directory so non-US users are never stranded.
+            "name": "Find A Helpline (international directory)",
+            "number": "findahelpline.com",
+            "action": "Find local support",
+            "region": "International"
         }
     ],
 }
