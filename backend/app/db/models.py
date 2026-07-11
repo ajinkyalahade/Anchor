@@ -56,8 +56,18 @@ class User(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
-    time_blocks: Mapped[list["TimeBlock"]] = relationship(back_populates="user")
-    time_estimates: Mapped[list["TimeEstimate"]] = relationship(back_populates="user")
+    # passive_deletes: let the DB's ON DELETE CASCADE remove rows instead of
+    # the ORM nulling their user_id first (which would orphan the content).
+    time_blocks: Mapped[list["TimeBlock"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    time_estimates: Mapped[list["TimeEstimate"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Profile(Base):
@@ -182,7 +192,7 @@ class AIMessage(Base):
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
     task: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -230,7 +240,7 @@ class GameSession(Base):
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
     game_key: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -256,7 +266,7 @@ class TimeBlock(Base):
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
     block_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -296,7 +306,7 @@ class TimeEstimate(Base):
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
     time_block_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -327,7 +337,7 @@ class RsdLog(Base):
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
     trigger_text_enc: Mapped[str] = mapped_column(Text, nullable=False)
@@ -353,7 +363,7 @@ class Quest(Base):
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
     quest_key: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -375,7 +385,7 @@ class CoachingSession(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -399,7 +409,7 @@ class CoachingMessage(Base):
         UUID(as_uuid=True), ForeignKey("coaching_sessions.id", ondelete="CASCADE"), nullable=False
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     role: Mapped[str] = mapped_column(String(16), nullable=False)  # 'user' | 'assistant'
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -435,7 +445,7 @@ class MoodCheckin(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     score: Mapped[int] = mapped_column(SmallInteger, nullable=False)  # 1–5
     note_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # encrypted free-text
@@ -453,7 +463,7 @@ class FocusSession(Base):
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
     duration_planned: Mapped[int] = mapped_column(Integer, nullable=False)

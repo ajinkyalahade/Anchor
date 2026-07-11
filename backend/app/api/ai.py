@@ -49,6 +49,7 @@ class UserStateResponse(BaseModel):
     crash_window_local: str | None
     current_streak_state: str
     comeback_bonus_active: bool
+    share_ai_context: bool = False
 
 
 @router.get("/user-state", response_model=UserStateResponse)
@@ -95,7 +96,8 @@ async def get_user_state(
         db.add(UserStateSnapshot(user_id=user_id, snapshot=snapshot))
     await db.flush()
 
-    return UserStateResponse(**snapshot)
+    consented = bool(((user.consent_flags if user else None) or {}).get("share_ai_context"))
+    return UserStateResponse(**snapshot, share_ai_context=consented)
 
 
 # ── AI Feedback (1F.4) ────────────────────────────────────────────────────────
@@ -391,13 +393,31 @@ async def _save_message(
 
 
 async def _build_prompt_context(db: AsyncSession, user_id: uuid.UUID) -> PromptContext:
-    """Build a PromptContext from current user state and DB history."""
+    """Build a PromptContext from current user state and DB history.
+
+    Consent gate (DATA-4): stored context — memories, state, session
+    summaries — only flows into AI prompts when the user has opted in via
+    consent_flags.share_ai_context (default OFF). The message the user is
+    actively sending is unaffected; only enrichment is gated.
+    """
     from collections import Counter
     from datetime import datetime
 
     from sqlalchemy.orm import selectinload
 
     from app.db.models import FocusSession, GameSession, Quest
+
+    # User + profile (loaded first: the consent flag decides everything else)
+    user_row = await db.execute(
+        select(User).where(User.id == user_id).options(selectinload(User.profile))
+    )
+    user = user_row.scalar_one_or_none()
+    if user is None or not (user.consent_flags or {}).get("share_ai_context"):
+        return PromptContext()
+    profile = user.profile
+    crash_window = profile.crash_window if profile else None
+    deficit_tags = (profile.deficit_tags or []) if profile else []
+    first_name = user.first_name
 
     # XP + rewards
     rows = await db.execute(
@@ -412,16 +432,6 @@ async def _build_prompt_context(db: AsyncSession, user_id: uuid.UUID) -> PromptC
     streak = reward_state.current_streak if reward_state else 0
     streak_state = reward_state.current_streak_state if reward_state else "building"
     comeback = reward_state.comeback_bonus_active if reward_state else False
-
-    # User + profile
-    user_row = await db.execute(
-        select(User).where(User.id == user_id).options(selectinload(User.profile))
-    )
-    user = user_row.scalar_one_or_none()
-    profile = user.profile if user else None
-    crash_window = profile.crash_window if profile else None
-    deficit_tags = (profile.deficit_tags or []) if profile else []
-    first_name = user.first_name if user else None
 
     from app.domain.user_state.service import compute_user_state
     state = compute_user_state(
