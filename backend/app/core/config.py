@@ -2,9 +2,15 @@
 
 import base64
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+# Anchored to the repo root so the env file is found regardless of the
+# process CWD (BE-5) — previously "../.env" silently loaded nothing when
+# the app started from any directory other than backend/.
+_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 
 _INSECURE_SECRETS = {
     "",
@@ -24,6 +30,11 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://anchor:anchor_dev@localhost:5432/anchor"
+    # SQL statement logging is opt-in (it logs parameter values, which here
+    # include sensitive text) — deliberately not tied to app_debug (BE-4).
+    database_echo: bool = False
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -78,7 +89,7 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:4173,http://127.0.0.1:4173"
 
-    model_config = {"env_file": "../.env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": str(_ENV_FILE), "env_file_encoding": "utf-8"}
 
     @property
     def cors_origin_list(self) -> list[str]:

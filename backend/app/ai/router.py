@@ -17,12 +17,11 @@ from app.core.config import get_settings
 from app.core.input_safety import sanitize_prompt_payload
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 # Keep a bare Anthropic client available for the legacy streaming endpoint
 anthropic_client = (
-    AsyncAnthropic(api_key=settings.anthropic_api_key)
-    if settings.anthropic_api_key
+    AsyncAnthropic(api_key=get_settings().anthropic_api_key)
+    if get_settings().anthropic_api_key
     else None
 )
 
@@ -166,6 +165,7 @@ def get_engine(task: str = "", engine_pref: str = "") -> "AnthropicEngine | Olla
     from app.ai.engines.anthropic_engine import AnthropicEngine
     from app.ai.engines.ollama_engine import OllamaEngine
 
+    settings = get_settings()
     pref = engine_pref or settings.ai_default_engine
 
     if pref == "ollama":
@@ -182,6 +182,7 @@ async def _resolve_engine(
     task: str, engine_pref: str = ""
 ) -> "AnthropicEngine | OllamaEngine":
     """Resolve engine with 'auto' fallback logic."""
+    settings = get_settings()
     pref = engine_pref or settings.ai_default_engine
     if pref != "auto":
         return get_engine(task, pref)
@@ -473,6 +474,7 @@ async def get_engines_status() -> dict[str, Any]:
 
     from app.ai.engines.anthropic_engine import AnthropicEngine
     from app.ai.engines.ollama_engine import OllamaEngine
+    settings = get_settings()
     anthropic = AnthropicEngine(api_key=settings.anthropic_api_key)
     ollama = OllamaEngine(base_url=settings.ollama_base_url)
     a_status, o_status = await asyncio.gather(anthropic.health(), ollama.health())
