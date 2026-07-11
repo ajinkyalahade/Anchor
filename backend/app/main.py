@@ -9,7 +9,7 @@ from app.api.health import router as health_router
 from app.core.audit import AuditMiddleware
 from app.core.cache import AppCache
 from app.core.config import get_settings
-from app.core.idempotency import IdempotencyKeyMiddleware
+from app.core.idempotency import IdempotencyKeyMiddleware, InMemoryIdempotencyStore
 from app.core.rate_limit import RateLimiter
 from app.core.request_logging import RequestLoggingMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
@@ -35,22 +35,26 @@ def create_app() -> FastAPI:
         docs_url="/v1/docs",
         openapi_url="/v1/openapi.json",
     )
-    app.state.idempotency_store = {}
+    app.state.idempotency_store = InMemoryIdempotencyStore()
     app.state.cache = AppCache(settings.redis_url)
     app.state.rate_limiter = RateLimiter(settings.redis_url)
 
-    # CORS
+    # CORS — explicit lists (SEC-7): wildcards with allow_credentials=True
+    # hand any allowed origin every method/header combination.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id"],
     )
     app.add_middleware(IdempotencyKeyMiddleware)
     app.add_middleware(AuditMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        enable_hsts=settings.app_env == "production",
+    )
 
     # Telemetry (no-op when OTLP_ENDPOINT not set)
     from app.core.telemetry import setup_telemetry

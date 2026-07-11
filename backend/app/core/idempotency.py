@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +23,49 @@ class StoredIdempotentResponse:
     body: bytes
     headers: dict[str, str]
     media_type: str | None
+
+
+class InMemoryIdempotencyStore:
+    """TTL- and size-bounded per-process store (BE-2).
+
+    Mirrors the Redis copy's 24h TTL so the in-process fallback doesn't grow
+    with traffic. Entries expire on read and are purged opportunistically on
+    write; a hard size cap evicts oldest-first as a backstop. Insertion order
+    equals expiry order (fixed TTL), so purging from the head is sufficient.
+    """
+
+    def __init__(self, ttl_seconds: float = 60 * 60 * 24, max_entries: int = 10_000) -> None:
+        self._ttl = ttl_seconds
+        self._max_entries = max_entries
+        self._data: OrderedDict[str, tuple[float, StoredIdempotentResponse]] = OrderedDict()
+
+    def get(self, key: str) -> StoredIdempotentResponse | None:
+        item = self._data.get(key)
+        if item is None:
+            return None
+        expires_at, value = item
+        if time.monotonic() >= expires_at:
+            del self._data[key]
+            return None
+        return value
+
+    def __setitem__(self, key: str, value: StoredIdempotentResponse) -> None:
+        now = time.monotonic()
+        while self._data:
+            oldest_key, (expires_at, _) = next(iter(self._data.items()))
+            if expires_at > now:
+                break
+            del self._data[oldest_key]
+        self._data.pop(key, None)
+        self._data[key] = (now + self._ttl, value)
+        while len(self._data) > self._max_entries:
+            self._data.popitem(last=False)
+
+    def clear(self) -> None:
+        self._data.clear()
+
+    def __len__(self) -> int:
+        return len(self._data)
 
 
 class IdempotencyKeyMiddleware(BaseHTTPMiddleware):
@@ -98,11 +143,11 @@ class IdempotencyKeyMiddleware(BaseHTTPMiddleware):
         return replayable
 
 
-def _get_store(request: Request) -> dict[str, StoredIdempotentResponse]:
+def _get_store(request: Request) -> InMemoryIdempotencyStore:
     state = request.app.state
     store = getattr(state, "idempotency_store", None)
     if store is None:
-        store = {}
+        store = InMemoryIdempotencyStore()
         state.idempotency_store = store
     return store
 

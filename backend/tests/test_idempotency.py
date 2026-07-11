@@ -6,9 +6,56 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.cache import AppCache
+from app.core.idempotency import InMemoryIdempotencyStore, StoredIdempotentResponse
 from app.db.database import get_db
 from app.db.models import Profile, User
 from app.main import app
+
+
+def _stored(tag: str = "x") -> StoredIdempotentResponse:
+    return StoredIdempotentResponse(
+        request_hash=tag, status_code=201, body=b"{}", headers={}, media_type="application/json"
+    )
+
+
+def test_in_memory_store_expires_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression (BE-2): the per-process store must not retain entries
+    beyond the TTL — previously it grew forever."""
+    clock = {"now": 1000.0}
+    monkeypatch.setattr("app.core.idempotency.time.monotonic", lambda: clock["now"])
+
+    store = InMemoryIdempotencyStore(ttl_seconds=10)
+    store["a"] = _stored()
+    assert store.get("a") is not None
+
+    clock["now"] += 11
+    assert store.get("a") is None
+    assert len(store) == 0
+
+    # Expired entries are also purged when a new key is written.
+    store["b"] = _stored()
+    clock["now"] += 11
+    store["c"] = _stored()
+    assert len(store) == 1
+
+
+def test_in_memory_store_caps_size() -> None:
+    store = InMemoryIdempotencyStore(max_entries=3)
+    for i in range(5):
+        store[f"k{i}"] = _stored()
+    assert len(store) == 3
+    assert store.get("k0") is None  # oldest evicted first
+    assert store.get("k4") is not None
+
+
+def test_in_memory_store_rewrite_refreshes_position() -> None:
+    store = InMemoryIdempotencyStore(max_entries=2)
+    store["a"] = _stored()
+    store["b"] = _stored()
+    store["a"] = _stored("new")  # re-set moves 'a' to newest
+    store["c"] = _stored()
+    assert store.get("b") is None  # 'b' was the oldest at the cap
+    assert store.get("a") is not None
 
 
 class FakeSession:

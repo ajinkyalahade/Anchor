@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from collections import deque
@@ -12,11 +13,21 @@ from redis.asyncio import Redis
 
 from app.api.deps import CurrentUserId
 
+logger = logging.getLogger("anchor.rate_limit")
+
 RateLimitConfig = tuple[int, int]  # max_requests, window_seconds
 
 
 class RateLimiter:
-    """Redis-backed limiter with an in-memory fallback for local/test use."""
+    """Redis-backed limiter with an in-memory fallback for local/test use.
+
+    A Redis failure degrades to the per-process memory path but retries with
+    exponential backoff (BE-3) — one blip must not silently multiply limits
+    by worker count forever. `_redis = None` disables Redis outright (tests).
+    """
+
+    _INITIAL_BACKOFF_SECONDS = 1.0
+    _MAX_BACKOFF_SECONDS = 60.0
 
     def __init__(self, redis_url: str) -> None:
         self._redis: Redis | None = Redis.from_url(
@@ -25,10 +36,12 @@ class RateLimiter:
             decode_responses=True,
         )
         self._memory: dict[str, deque[float]] = {}
+        self._retry_at = 0.0
+        self._backoff = self._INITIAL_BACKOFF_SECONDS
 
     async def hit(self, key: str, *, max_requests: int, window_seconds: int) -> int | None:
         redis_client = self._redis
-        if redis_client is not None:
+        if redis_client is not None and time.monotonic() >= self._retry_at:
             try:
                 now = time.time()
                 pipe = redis_client.pipeline()
@@ -37,11 +50,21 @@ class RateLimiter:
                 pipe.zadd(key, {str(now): now})
                 pipe.expire(key, window_seconds)
                 _, current_count, _, _ = await pipe.execute()
+                if self._backoff != self._INITIAL_BACKOFF_SECONDS:
+                    logger.info("rate limiter: Redis connection restored")
+                self._backoff = self._INITIAL_BACKOFF_SECONDS
                 if int(current_count) >= max_requests:
                     return window_seconds
                 return None
-            except Exception:
-                self._redis = None
+            except Exception as exc:
+                self._retry_at = time.monotonic() + self._backoff
+                logger.error(
+                    "rate limiter degraded to in-memory (limits multiply per worker);"
+                    " retrying Redis in %.0fs error=%s",
+                    self._backoff,
+                    exc,
+                )
+                self._backoff = min(self._backoff * 2, self._MAX_BACKOFF_SECONDS)
 
         now = time.time()
         bucket = self._memory.setdefault(key, deque())
