@@ -8,7 +8,8 @@ import React from 'react';
 const { apiPostMock, recordFocusInsightSessionMock, grantRewardMock } = vi.hoisted(() => ({
   apiPostMock: vi.fn(),
   recordFocusInsightSessionMock: vi.fn(),
-  grantRewardMock: vi.fn(),
+  // FocusPage chains .then() on the result, so the mock must return a promise.
+  grantRewardMock: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../lib/api', () => ({

@@ -147,7 +147,6 @@ export default function GamesPage() {
     };
     const m = routeMap[gameId];
     if (m) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMode(m);
       setGameState('start');
     }
