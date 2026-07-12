@@ -284,3 +284,33 @@ async def test_invalid_token_returns_401() -> None:
 
     assert response.status_code == 401
     assert response.json()["detail"] == "token_invalid"
+
+
+@pytest.mark.asyncio
+async def test_me_returns_authenticated_identity() -> None:
+    """FE-2: /auth/me is the canonical source for the greeting name
+    (clients previously relied on localStorage). Real-DB test."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        email = f"me-{uuid.uuid4().hex[:10]}@example.com"
+        reg = await client.post(
+            "/v1/auth/register",
+            json={
+                "email": email,
+                "first_name": "Alai",
+                "last_name": "Tester",
+                "password": "Str0ngPass!x",
+            },
+        )
+        assert reg.status_code == 201, reg.text
+        headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+        me = await client.get("/v1/auth/me", headers=headers)
+        assert me.status_code == 200
+        body = me.json()
+        assert body["email"] == email
+        assert body["first_name"] == "Alai"
+        assert body["last_name"] == "Tester"
+
+        anon = await client.get("/v1/auth/me")
+        assert anon.status_code == 401

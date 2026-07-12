@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SESSION_EXPIRED_EVENT } from './lib/api';
 import { applyTheme } from './lib/rewards';
 
 import AuthGuard from './components/AuthGuard';
@@ -65,8 +66,16 @@ function wrap(el: ReactNode, pathname: string) {
 
 function AppLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+
+  // Session expiry redirects in-app (no reload) so local state survives.
+  useEffect(() => {
+    const onExpired = () => navigate('/login', { replace: true, state: { sessionExpired: true } });
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, [navigate]);
 
   const showSidebar =
     !NO_SIDEBAR_PATHS.includes(location.pathname) &&

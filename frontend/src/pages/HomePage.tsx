@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '../lib/api';
 import { loadInsightDashboard } from '../lib/insights';
 import { computeModalityPreferences, personalizeSuggestion } from '../lib/personalization';
@@ -35,7 +36,18 @@ const TODAY_LOG: { time: string; label: string; tag: string; state: string }[] =
 export default function HomePage() {
   const navigate = useNavigate();
   const greeting = getGreeting();
-  const firstName = localStorage.getItem('anchor_first_name') || '';
+  // Profile API is the source of truth for the name (FE-2) — localStorage is
+  // only the instant fallback while the query loads (and it goes stale on a
+  // second device or after profile edits).
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.get<{ first_name: string | null }>('/auth/me'),
+    staleTime: 5 * 60 * 1000,
+  });
+  useEffect(() => {
+    if (me?.first_name) localStorage.setItem('anchor_first_name', me.first_name);
+  }, [me?.first_name]);
+  const firstName = me?.first_name ?? (localStorage.getItem('anchor_first_name') || '');
 
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [suggestionIdx, setSuggestionIdx] = useState(0);

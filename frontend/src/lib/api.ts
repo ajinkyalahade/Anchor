@@ -6,6 +6,12 @@
 
 const BASE_URL = '/v1';
 
+/** Dispatched when the session is no longer valid (expired/revoked token).
+ * The router listens and performs an in-app redirect to /login — a full
+ * page reload here would destroy in-progress state (mid-breathing-exercise,
+ * mid-focus-session), which is a jarring failure mode for this audience. */
+export const SESSION_EXPIRED_EVENT = 'anchor:session-expired';
+
 interface RequestOptions extends RequestInit {
   idempotencyKey?: string;
   params?: Record<string, string>;
@@ -64,10 +70,14 @@ class ApiClient {
     }
   }
 
+  private expireSession() {
+    this.setAuthToken(null);
+    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+  }
+
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     if (this.isTokenExpired()) {
-      this.setAuthToken(null);
-      window.location.href = '/login';
+      this.expireSession();
       throw new ApiError(401, 'token_expired', {});
     }
 
@@ -81,9 +91,10 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        this.setAuthToken(null);
-        window.location.href = '/login';
+      // A 401 from /auth/* is a failed login/registration, not an expired
+      // session — only non-auth endpoints signal session expiry.
+      if (response.status === 401 && !path.startsWith('/auth/')) {
+        this.expireSession();
       }
       const error = await response.json().catch(() => ({ detail: response.statusText }));
       throw new ApiError(response.status, error.detail || 'Request could not be completed right now.', error);

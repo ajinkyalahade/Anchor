@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CurrentUserId
 from app.core.auth import (
     ACCESS_TOKEN_TTL_SECONDS,
     build_access_token,
@@ -235,6 +236,28 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
             pass  # nothing to revoke on a bad token
 
     return {"status": "logged_out"}
+
+
+class MeResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str | None
+    first_name: str | None
+    last_name: str | None
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(user_id: CurrentUserId, db: DbSession) -> MeResponse:
+    """Return the authenticated user's identity — the canonical source for
+    the greeting name (FE-2: clients previously relied on localStorage)."""
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return MeResponse(
+        user_id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
 
 
 def _bearer_or_cookie_token(request: Request) -> str | None:
