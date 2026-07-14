@@ -4,7 +4,7 @@ import base64
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 # Anchored to the repo root so the env file is found regardless of the
@@ -94,6 +94,18 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_scheme(cls, value: str) -> str:
+        """Managed platforms (Render, Heroku, Railway) hand out postgres://
+        or postgresql:// URLs; SQLAlchemy needs the asyncpg driver spelled
+        out. Normalize so their connection strings work unedited."""
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
 
     @model_validator(mode="after")
     def _refuse_insecure_production_config(self) -> "Settings":

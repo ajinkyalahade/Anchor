@@ -69,3 +69,16 @@ def test_encryption_roundtrip_with_dev_fallback_key() -> None:
     from app.core.encryption import decrypt_text, encrypt_text
 
     assert decrypt_text(encrypt_text("hello")) == "hello"
+
+
+def test_database_url_scheme_is_normalized_for_paas() -> None:
+    """Render/Heroku hand out postgres:// URLs; the app must accept them."""
+    from app.core.config import Settings
+
+    for given in (
+        "postgres://u:p@host:5432/db",
+        "postgresql://u:p@host:5432/db",
+        "postgresql+asyncpg://u:p@host:5432/db",
+    ):
+        settings = Settings(database_url=given)
+        assert settings.database_url == "postgresql+asyncpg://u:p@host:5432/db"

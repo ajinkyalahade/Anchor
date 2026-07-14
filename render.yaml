@@ -1,0 +1,139 @@
+# Anchor — Render Blueprint (INF-5).
+#
+# Topology mirrors docker-compose: a public nginx frontend that serves the
+# built SPA and proxies /v1 to the API; the API and worker run as private
+# services (not internet-reachable); Postgres and Key Value are managed.
+#
+# One-time setup after "New > Blueprint" in the Render dashboard:
+#   - Fill the sync:false secrets (ANTHROPIC_API_KEY, CORS_ORIGINS,
+#     PUBLIC_APP_URL) — see .env.production.example for how to generate
+#     values and what each does.
+# Full runbook: docs/DEPLOYMENT.md
+
+services:
+  # ── Public entrypoint ──────────────────────────────────────────────────────
+  # nginx: static SPA + strict CSP + /v1 reverse proxy (frontend/nginx.conf).
+  - type: web
+    name: anchor-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: BACKEND_HOST
+        fromService:
+          type: pserv
+          name: anchor-api
+          property: host
+      - key: BACKEND_PORT
+        fromService:
+          type: pserv
+          name: anchor-api
+          property: port
+
+  # ── API (private: only reachable through the nginx proxy) ────────────────
+  - type: pserv
+    name: anchor-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    # Migrations run as a deploy step, never in the app container (INF-3),
+    # so concurrent replicas can't race.
+    preDeployCommand: uv run alembic upgrade head
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: anchor-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: anchor-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true # base64 256-bit
+      - key: MAGIC_LINK_SECRET
+        generateValue: true
+      - key: FIELD_ENCRYPTION_KEY
+        generateValue: true # base64 of 32 random bytes — exactly what encryption.py expects
+      - key: AI_DEFAULT_ENGINE
+        value: anthropic # production AI decision (docs/AI_ENGINE_DECISION.md)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false # the public frontend URL, e.g. https://anchor-frontend.onrender.com
+      - key: PUBLIC_APP_URL
+        sync: false # used to build password-reset links in emails
+      - key: LOG_JSON
+        value: "true"
+
+  # ── Background scheduler (nudges + due account deletions) ────────────────
+  # Secrets are copied from anchor-api (fromService/envVarKey) so both
+  # services always share the same generated values — a second
+  # generateValue here would mint different keys and break decryption.
+  - type: worker
+    name: anchor-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    dockerCommand: uv run python -m app.workers.scheduler
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: anchor-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: anchor-redis
+          property: connectionString
+      - key: JWT_SECRET
+        fromService:
+          type: pserv
+          name: anchor-api
+          envVarKey: JWT_SECRET
+      - key: MAGIC_LINK_SECRET
+        fromService:
+          type: pserv
+          name: anchor-api
+          envVarKey: MAGIC_LINK_SECRET
+      - key: FIELD_ENCRYPTION_KEY
+        fromService:
+          type: pserv
+          name: anchor-api
+          envVarKey: FIELD_ENCRYPTION_KEY
+      - key: ANTHROPIC_API_KEY
+        fromService:
+          type: pserv
+          name: anchor-api
+          envVarKey: ANTHROPIC_API_KEY
+      - key: AI_DEFAULT_ENGINE
+        value: anthropic
+      - key: LOG_JSON
+        value: "true"
+
+  # ── Rate limiting / idempotency / token revocation ────────────────────────
+  - type: keyvalue
+    name: anchor-redis
+    plan: starter
+    ipAllowList: [] # internal connections only
+    # The token-revocation denylist lives here: evicting keys would
+    # resurrect revoked tokens, so never allow eviction.
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: anchor-db
+    databaseName: anchor
+    user: anchor
+    plan: basic-256mb # paid plan: daily backups + no 30-day expiry
