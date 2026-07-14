@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: F401  (used in helper t
 
 from app.ai.router import AITask, PromptContext, route
 from app.api.deps import CurrentUserId, UserEnginePref
-from app.core.encryption import encrypt_text
+from app.core.encryption import decrypt_text, encrypt_text
 from app.core.input_safety import sanitize_prompt_text
 from app.core.rate_limit import build_rate_limit_dependency
 from app.db.database import get_db
@@ -333,7 +333,10 @@ async def talk_to_anchor(
         .limit(10)
     )
     prior_messages = rows.scalars().all()
-    history = [{"role": m.role, "content": m.content} for m in prior_messages]
+    history = [
+        {"role": m.role, "content": _read_message_content(m.content)}
+        for m in prior_messages
+    ]
 
     # Save user message
     await _save_message(db, session.id, user_id, "user", data.message)
@@ -387,9 +390,22 @@ async def _save_message(
     role: str,
     content: str,
 ) -> CoachingMessage:
-    msg = CoachingMessage(session_id=session_id, user_id=user_id, role=role, content=content)
+    # Conversation content is encrypted at rest (DATA-2) — coach messages
+    # are among the most sensitive data this app stores.
+    msg = CoachingMessage(
+        session_id=session_id, user_id=user_id, role=role, content=encrypt_text(content)
+    )
     db.add(msg)
     return msg
+
+
+def _read_message_content(stored: str) -> str:
+    """Decrypt a stored coaching message; tolerate legacy plaintext rows so
+    an unmigrated environment degrades to readable history, not a 500."""
+    try:
+        return decrypt_text(stored)
+    except Exception:
+        return stored
 
 
 async def _build_prompt_context(db: AsyncSession, user_id: uuid.UUID) -> PromptContext:

@@ -58,3 +58,35 @@ async def test_coach_endpoint_uses_crisis_branch_when_needed() -> None:
     data = response.json()
     assert data["is_crisis"] is True
     assert data["resources"]
+
+
+@pytest.mark.asyncio
+async def test_coach_messages_are_encrypted_at_rest() -> None:
+    """DATA-2: conversation content must not be readable in the database."""
+    import uuid as uuid_mod
+
+    from sqlalchemy import select
+
+    from app.core.encryption import decrypt_text
+    from app.db.database import async_session_factory
+    from app.db.models import CoachingMessage
+
+    plaintext = "I feel overwhelmed by everything today"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await register_test_user(client)
+        response = await client.post(
+            "/v1/ai/coach", json={"message": plaintext}, headers=headers
+        )
+    assert response.status_code == 200
+    session_id = uuid_mod.UUID(response.json()["session_id"])
+
+    async with async_session_factory() as db:
+        rows = await db.execute(
+            select(CoachingMessage).where(CoachingMessage.session_id == session_id)
+        )
+        messages = rows.scalars().all()
+        assert messages, "expected the user message to be stored"
+        user_msg = next(m for m in messages if m.role == "user")
+        assert plaintext not in user_msg.content  # ciphertext, not plaintext
+        assert decrypt_text(user_msg.content) == plaintext
