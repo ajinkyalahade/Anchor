@@ -38,6 +38,13 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setupTests.ts',
+    coverage: {
+      // Measure all source files, not just those imported by tests —
+      // otherwise the number flatters untested pages. Report-only for now
+      // (no thresholds); the backend job carries the coverage gate.
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/test/**', 'src/**/*.test.*', 'src/sw.ts', 'src/main.tsx'],
+    },
   },
   server: {
     port: 5173,
