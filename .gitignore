@@ -33,6 +33,7 @@ Thumbs.db
 # Test coverage
 coverage/
 htmlcov/
+.coverage
 .pytest_cache/
 
 # Tooling artifacts

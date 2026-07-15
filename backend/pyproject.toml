@@ -1,7 +1,7 @@
 [project]
 name = "anchor-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Anchor backend — FastAPI API for the ADHD companion app"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

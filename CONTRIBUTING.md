@@ -18,20 +18,18 @@ make lint
 
 ## Local Commands
 
-Backend targeted tests:
+Backend (full suite, same as CI — needs Postgres + Redis via `docker compose up -d db redis`):
 
 ```bash
 cd backend
-./.venv/bin/pytest tests/test_auth.py tests/test_onboarding.py tests/test_focus.py tests/test_games.py tests/test_calm.py tests/test_rewards.py tests/test_account.py tests/test_brain_games.py -q
+uv run ruff check . && uv run mypy app && uv run pytest
 ```
 
 Frontend checks:
 
 ```bash
 cd frontend
-npm test
-npx tsc --noEmit -p tsconfig.app.json
-npm run build
+npm run lint && npx tsc -b --noEmit && npm test && npm run build
 ```
 
 Secret scan:
@@ -57,8 +55,9 @@ Secret scan:
 
 ## Test Expectations
 
-- Frontend changes should keep `npm test`, `tsc --noEmit`, and `npm run build` green
-- Backend changes should include targeted pytest coverage where possible
+- Every change ships with tests alongside the implementation
+- Frontend changes keep `npm run lint`, `tsc -b`, `npm test`, and `npm run build` green
+- Backend changes keep `ruff`, `mypy`, and the full `pytest` suite green (CI enforces a coverage floor)
 - If a repo-wide failing test or lint issue is pre-existing, note it clearly instead of hiding it
 
 ## Reporting Problems

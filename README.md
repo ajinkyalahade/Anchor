@@ -1,6 +1,6 @@
 # Anchor
 
-![Frontend](https://github.com/your-org/anchor/actions/workflows/frontend.yml/badge.svg)
+![CI](https://github.com/ajinkyalahade/Anchor/actions/workflows/ci.yml/badge.svg)
 
 Anchor is an ADHD companion for the moments that usually slip away first: starting a task, staying with it long enough to build traction, calming an overload spiral, and recovering without shame when the day goes sideways. It combines lightweight structure, short nervous-system resets, simple cognitive games, and AI-assisted suggestions into a single app surface that is designed to feel supportive rather than punitive.
 
@@ -41,10 +41,12 @@ The project is built as a practical daily tool, not a productivity dashboard. Th
 
 ## Project Structure
 
-- `frontend/`: React + Vite application
-- `backend/`: FastAPI application
-- `shared/`: shared project assets
-- `docs/`: supporting notes and documentation
+- `frontend/`: React + Vite application (served by nginx in production)
+- `backend/`: FastAPI application (`app/api` routes, `app/ai` AI layer, `app/core` middleware, `migrations/` Alembic)
+- `docs/`: documentation — see [docs/README.md](docs/README.md) for the index
+  (production-readiness checklist, deployment runbook, module docs, PRD)
+- `render.yaml`: production deployment blueprint (Render) — runbook in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- `docker-compose.yml`: the local dev stack
 
 ## Local Setup
 
@@ -98,8 +100,9 @@ make lint
 | `APP_ENV` | No | Environment name such as `development` or `production` |
 | `APP_DEBUG` | No | Backend debug toggle |
 | `CORS_ORIGINS` | No | Comma-separated allowed frontend origins |
-| `ANTHROPIC_API_KEY` | No | Claude-backed AI features |
-| `GOOGLE_AI_API_KEY` | No | Gemini-backed AI features |
+| `ANTHROPIC_API_KEY` | No | Claude-backed AI features (production engine) |
+| `AI_DEFAULT_ENGINE` | No | `anthropic` \| `ollama` \| `auto` (dev default: local Ollama) |
+| `SENTRY_DSN` | No | Error tracking; empty disables |
 | `OTLP_ENDPOINT` | No | OpenTelemetry collector endpoint |
 | `OTLP_SERVICE_NAME` | No | Telemetry service name |
 | `METRICS_ENABLED` | No | Metrics toggle |
@@ -114,63 +117,46 @@ make lint
 
 ## Observability
 
-Anchor emits structured JSON logs and OpenTelemetry traces. To add error monitoring with Sentry:
+Anchor emits structured JSON logs (with request-id propagation), OpenTelemetry
+traces and AI metrics, and has a Sentry hook wired into the global exception
+handler. All of it is configuration-only:
 
-1. Install the SDK:
-   ```bash
-   # Backend
-   uv add sentry-sdk[fastapi]
-   # Frontend
-   npm install @sentry/react
-   ```
-
-2. Set the env var:
-   ```
-   SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
-   ```
-
-3. Backend — initialize in `backend/app/main.py` before the app is created:
-   ```python
-   import sentry_sdk
-   sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"), traces_sample_rate=0.2)
-   ```
-
-4. Frontend — wrap the app in `frontend/src/main.tsx`:
-   ```ts
-   import * as Sentry from "@sentry/react";
-   Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, tracesSampleRate: 0.2 });
-   ```
-
-Without a DSN set, neither SDK activates — safe to deploy without Sentry.
-
----
+- `SENTRY_DSN` — set it and backend error tracking activates; empty disables.
+- `OTLP_ENDPOINT` — set it and traces/metrics export; empty is a no-op.
+- `GET /v1/metrics/ai` — AI fallback-rate metrics for monitoring.
 
 ## Verification
 
-Backend targeted tests:
+Same gates as CI. Backend (needs Postgres + Redis: `docker compose up -d db redis`):
 
 ```bash
 cd backend
-./.venv/bin/pytest tests/test_auth.py tests/test_onboarding.py tests/test_focus.py tests/test_games.py tests/test_calm.py tests/test_rewards.py tests/test_account.py tests/test_brain_games.py -q
+uv run ruff check . && uv run mypy app && uv run pytest
 ```
 
-Frontend checks:
+Frontend:
 
 ```bash
 cd frontend
-npm test
-npx tsc --noEmit -p tsconfig.app.json
-npm run build
+npm run lint && npx tsc -b --noEmit && npm test && npm run build
 ```
+
+Or from the repo root: `make lint && make test`.
+
+## Deployment
+
+Production runs on Render from [`render.yaml`](render.yaml) — see the
+runbook in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The hardening history
+lives in [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](/Users/alai/Documents/Projects/Anchor/CONTRIBUTING.md) for development workflow, test expectations, and PR guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, test expectations, and PR guidelines.
 
 ## Code of Conduct
 
-See [CODE_OF_CONDUCT.md](/Users/alai/Documents/Projects/Anchor/CODE_OF_CONDUCT.md).
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](/Users/alai/Documents/Projects/Anchor/LICENSE).
+This project is released under the MIT License. See [LICENSE](LICENSE).
