@@ -94,3 +94,87 @@ async def test_logout_clears_session_cookie() -> None:
     # A delete-cookie directive is emitted for the session cookie.
     set_cookie = resp.headers.get("set-cookie", "")
     assert "anchor_session=" in set_cookie
+
+
+# ── SEC-9: argon2 hashing with legacy scrypt compatibility ───────────────────
+
+def test_new_hashes_are_argon2() -> None:
+    from app.core.auth import hash_password, verify_password
+
+    stored = hash_password("correct horse battery")
+    assert stored.startswith("$argon2")
+    assert verify_password("correct horse battery", stored)
+    assert not verify_password("wrong password", stored)
+
+
+def test_legacy_scrypt_hashes_still_verify_and_want_rehash() -> None:
+    import hashlib
+    import os
+
+    from app.core.auth import password_needs_rehash, verify_password
+
+    salt = os.urandom(16)
+    derived = hashlib.scrypt(b"legacy-pass", salt=salt, n=16384, r=8, p=1, dklen=32)
+    legacy = salt.hex() + "$" + derived.hex()
+
+    assert verify_password("legacy-pass", legacy)
+    assert not verify_password("not-it", legacy)
+    assert password_needs_rehash(legacy)
+
+    from app.core.auth import hash_password
+    assert not password_needs_rehash(hash_password("fresh"))
+
+
+def test_access_token_decodes_with_pyjwt() -> None:
+    import jwt as pyjwt
+
+    from app.core.auth import build_access_token
+
+    token, expires_at = build_access_token(
+        user_id="user-123", email="t@example.com", secret="s" * 32
+    )
+    claims = pyjwt.decode(token, "s" * 32, algorithms=["HS256"])
+    assert claims["sub"] == "user-123"
+    assert claims["exp"] == expires_at
+    assert claims["jti"]
+
+
+@pytest.mark.asyncio
+async def test_login_upgrades_legacy_scrypt_hash() -> None:
+    """A pre-migration user logs in fine and their hash is silently
+    upgraded to argon2 (real-DB test)."""
+    import hashlib
+    import os
+    import uuid as uuid_mod
+
+    from httpx import ASGITransport, AsyncClient
+
+    from app.db.database import async_session_factory
+    from app.db.models import User
+    from app.main import app
+
+    email = f"legacy-{uuid_mod.uuid4().hex[:10]}@example.com"
+    salt = os.urandom(16)
+    derived = hashlib.scrypt(b"OldPassword9", salt=salt, n=16384, r=8, p=1, dklen=32)
+    legacy_hash = salt.hex() + "$" + derived.hex()
+
+    async with async_session_factory() as db:
+        user = User(id=uuid_mod.uuid4(), email=email, password_hash=legacy_hash)
+        db.add(user)
+        await db.commit()
+        user_id = user.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/auth/login", json={"email": email, "password": "OldPassword9"}
+        )
+    assert response.status_code == 200, response.text
+
+    async with async_session_factory() as db:
+        refreshed = await db.get(User, user_id)
+        assert refreshed is not None
+        assert refreshed.password_hash is not None
+        assert refreshed.password_hash.startswith("$argon2")
+        await db.delete(refreshed)
+        await db.commit()

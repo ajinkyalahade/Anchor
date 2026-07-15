@@ -17,6 +17,10 @@ _INSECURE_SECRETS = {
     "change-me-in-production",
     "dev-secret-not-for-production",
     "dev-magic-not-for-production",
+    # Padded variants (32+ bytes so PyJWT doesn't warn in dev) — still
+    # publicly known strings that must never reach production.
+    "dev-secret-not-for-production-padding0",
+    "dev-magic-not-for-production-padding0",
 }
 _MIN_SECRET_LENGTH = 32
 

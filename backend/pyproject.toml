@@ -26,6 +26,7 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http==1.41.1",
     "pyjwt==2.12.1",
     "ollama>=0.6.2",
+    "argon2-cffi>=25.1.0",
 ]
 
 [dependency-groups]

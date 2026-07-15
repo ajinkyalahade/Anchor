@@ -1,39 +1,53 @@
 # SPDX-License-Identifier: MIT
 """Auth helpers — password hashing and JWT token management."""
 
-import base64
 import hashlib
 import hmac
-import json
-import os
 import secrets
 import time
 from typing import Any
+
+import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
 
 MAGIC_LINK_TTL_SECONDS = 15 * 60
 ACCESS_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60
 
 
 # ---------------------------------------------------------------------------
-# Password hashing (scrypt — no extra deps needed)
+# Password hashing — argon2id (SEC-9). Hashes created before the switch used
+# scrypt ('salt$hash' hex); they still verify, and login transparently
+# re-hashes them (see password_needs_rehash).
 # ---------------------------------------------------------------------------
 
+_hasher = PasswordHasher()
+
+
 def hash_password(password: str) -> str:
-    """Hash a password using scrypt with a random salt. Returns 'salt$hash' hex string."""
-    salt = os.urandom(16)
-    derived = hashlib.scrypt(
-        password.encode(),
-        salt=salt,
-        n=16384,
-        r=8,
-        p=1,
-        dklen=32,
-    )
-    return salt.hex() + "$" + derived.hex()
+    """Hash a password with argon2id (returns a self-describing '$argon2id$…')."""
+    return _hasher.hash(password)
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    """Verify a password against a stored 'salt$hash' string."""
+    """Verify a password against an argon2 hash or a legacy scrypt hash."""
+    if stored_hash.startswith("$argon2"):
+        try:
+            return _hasher.verify(stored_hash, password)
+        except (VerificationError, InvalidHashError):
+            return False
+    return _verify_legacy_scrypt(password, stored_hash)
+
+
+def password_needs_rehash(stored_hash: str) -> bool:
+    """True when the stored hash should be upgraded on successful login —
+    either legacy scrypt or an argon2 hash with outdated parameters."""
+    if not stored_hash.startswith("$argon2"):
+        return True
+    return _hasher.check_needs_rehash(stored_hash)
+
+
+def _verify_legacy_scrypt(password: str, stored_hash: str) -> bool:
     try:
         salt_hex, hash_hex = stored_hash.split("$", 1)
         salt = bytes.fromhex(salt_hex)
@@ -84,18 +98,6 @@ def build_access_token(*, user_id: str, email: str | None, secret: str) -> tuple
         "exp": expires_at,
         "jti": secrets.token_urlsafe(16),
     }
-    return _encode_jwt(payload, secret), expires_at
-
-
-def _encode_jwt(payload: dict[str, Any], secret: str) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_part = _base64url_encode(json.dumps(header, separators=(",", ":")).encode())
-    payload_part = _base64url_encode(json.dumps(payload, separators=(",", ":")).encode())
-    signing_input = f"{header_part}.{payload_part}".encode()
-    signature = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
-    signature_part = _base64url_encode(signature)
-    return f"{header_part}.{payload_part}.{signature_part}"
-
-
-def _base64url_encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode().rstrip("=")
+    # PyJWT for encoding too (SEC-9) — deps.py already decodes with it;
+    # two implementations of the same primitive invite drift.
+    return jwt.encode(payload, secret, algorithm="HS256"), expires_at

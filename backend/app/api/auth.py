@@ -18,6 +18,7 @@ from app.core.auth import (
     generate_magic_link_token,
     hash_magic_link_token,
     hash_password,
+    password_needs_rehash,
     verify_password,
 )
 from app.core.config import get_settings
@@ -162,6 +163,12 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
+
+    # Transparent upgrade: legacy scrypt hashes (and outdated argon2 params)
+    # are re-hashed with current argon2id on successful login.
+    if password_needs_rehash(user.password_hash):
+        user.password_hash = hash_password(payload.password)
+        await db.flush()
 
     access_token, access_expiry = build_access_token(
         user_id=str(user.id),
