@@ -1,4 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Fonts are self-hosted (@fontsource) so the CSP needs no third-party
+   origins and the app renders identically offline. (Plus Jakarta Sans was
+   loaded from Google Fonts but never referenced by any CSS — dropped.) */
+@import "@fontsource/newsreader/400.css";
+@import "@fontsource/newsreader/400-italic.css";
+@import "@fontsource/newsreader/500.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
 @import "tailwindcss";
 @import "./styles/tokens.css";
 
