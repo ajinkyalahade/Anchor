@@ -9,7 +9,9 @@ from app.main import app
 
 
 class StubEngine:
-    async def complete(self, system: str, messages: list, max_tokens: int = 512) -> str:
+    async def complete(
+        self, system: str, messages: list, max_tokens: int = 512, output_schema: dict | None = None
+    ) -> str:
         return (
             '{"steps": [{"label": "Open it", "est_minutes": 1, "first": true}],'
             ' "why_first_step_matters": "Starting counts."}'

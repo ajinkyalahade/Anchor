@@ -1,7 +1,7 @@
 """Anthropic (Claude) engine implementation."""
 
 import logging
-from typing import cast
+from typing import Any, cast
 
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, TextBlock
@@ -28,15 +28,25 @@ class AnthropicEngine:
         system: str,
         messages: list[dict[str, str]],
         max_tokens: int = 512,
+        output_schema: dict[str, Any] | None = None,
     ) -> str:
         if not self._client:
             raise RuntimeError("Anthropic API key not configured")
+
+        kwargs: dict[str, Any] = {}
+        if output_schema is not None:
+            # Structured outputs (AI-5): the API guarantees the text block is
+            # valid JSON matching the schema — replaces fence-splitting.
+            kwargs["output_config"] = {
+                "format": {"type": "json_schema", "schema": output_schema}
+            }
 
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=max_tokens,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=cast(list[MessageParam], messages),
+            **kwargs,
         )
         block = response.content[0]
         return block.text if isinstance(block, TextBlock) else ""

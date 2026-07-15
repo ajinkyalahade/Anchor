@@ -309,6 +309,7 @@ async def _run_decompose(
             "content": f"Task: {task_text}\n\nRespond with strictly valid JSON.",
         }],
         max_tokens=1024,
+        output_schema=DECOMPOSE_SPEC.output_schema,
     )
     result = _parse_json(text)
     return result if validate_output(DECOMPOSE_SPEC, result) else dict(_FALLBACKS[AITask.DECOMPOSE])
@@ -357,6 +358,7 @@ async def _run_evaluate_word(base_word: str, user_word: str, engine: Any) -> dic
         system=WORDGYM_SYSTEM_PROMPT + "\nRespond ONLY with valid JSON.",
         messages=[{"role": "user", "content": f"Base word: {base_word}\nUser word: {user_word}"}],
         max_tokens=128,
+        output_schema=WORDGYM_SPEC.output_schema,
     )
     result = _parse_json(text)
     if validate_output(WORDGYM_SPEC, result):
@@ -381,6 +383,7 @@ async def _run_rsd(
             ),
         }],
         max_tokens=256,
+        output_schema=RSD_SPEC.output_schema,
     )
     result = _parse_json(text)
     return result if validate_output(RSD_SPEC, result) else dict(_FALLBACKS[AITask.RSD_RESPONSE])
@@ -394,6 +397,7 @@ async def _run_insight_weekly(payload: dict[str, Any], engine: Any) -> dict[str,
         system=INSIGHT_WEEKLY_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": json.dumps(payload)}],
         max_tokens=384,
+        output_schema=INSIGHT_WEEKLY_SPEC.output_schema,
     )
     result = _parse_json(text)
     if validate_output(INSIGHT_WEEKLY_SPEC, result):
@@ -409,6 +413,7 @@ async def _run_quest_weekly(payload: dict[str, Any], engine: Any) -> dict[str, A
         system=QUEST_WEEKLY_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": json.dumps(payload)}],
         max_tokens=256,
+        output_schema=QUEST_WEEKLY_SPEC.output_schema,
     )
     result = _parse_json(text)
     if validate_output(QUEST_WEEKLY_SPEC, result):
@@ -432,6 +437,7 @@ async def _run_classify_game(
             ),
         }],
         max_tokens=128,
+        output_schema=CLASSIFY_GAME_SESSION_SPEC.output_schema,
     )
     result = _parse_json(text)
     if validate_output(CLASSIFY_GAME_SESSION_SPEC, result):
@@ -443,12 +449,14 @@ async def _run_daily_briefing(
     payload: dict[str, Any], context: PromptContext | None, engine: Any
 ) -> dict[str, Any]:
     from app.ai.prompts.briefing import BRIEFING_SYSTEM_PROMPT
+    from app.ai.prompts.registry import BRIEFING_SCHEMA
 
     context_block = context.to_system_block() if context else ""
     text = await engine.complete(
         system=BRIEFING_SYSTEM_PROMPT + context_block,
         messages=[{"role": "user", "content": json.dumps(payload)}],
         max_tokens=256,
+        output_schema=BRIEFING_SCHEMA,
     )
     result = _parse_json(text)
     required = {"greeting", "energy_read", "suggested_first_action", "affirmation"}
@@ -457,11 +465,13 @@ async def _run_daily_briefing(
 
 async def _run_nudge(payload: dict[str, Any], engine: Any) -> dict[str, Any]:
     from app.ai.prompts.nudge import NUDGE_SYSTEM_PROMPT
+    from app.ai.prompts.registry import NUDGE_SCHEMA
 
     text = await engine.complete(
         system=NUDGE_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": json.dumps(payload)}],
         max_tokens=128,
+        output_schema=NUDGE_SCHEMA,
     )
     result = _parse_json(text)
     return result if {"title", "body"}.issubset(result) else dict(_FALLBACKS[AITask.NUDGE])

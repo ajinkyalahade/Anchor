@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class EngineType(StrEnum):
@@ -26,8 +26,14 @@ class AIEngine(Protocol):
         system: str,
         messages: list[dict[str, str]],
         max_tokens: int = 512,
+        output_schema: dict[str, Any] | None = None,
     ) -> str:
-        """Send a completion request and return raw text response."""
+        """Send a completion request and return raw text response.
+
+        When output_schema is given, the engine enforces it server-side
+        (AI-5: structured outputs), so the returned text is valid JSON
+        matching the schema — no code-fence parsing needed.
+        """
         ...
 
     async def health(self) -> EngineStatus:

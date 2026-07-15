@@ -1,6 +1,7 @@
 """Ollama (local) engine implementation — uses the official ollama Python SDK."""
 
 import logging
+from typing import Any
 
 import ollama
 
@@ -33,12 +34,16 @@ class OllamaEngine:
         system: str,
         messages: list[dict[str, str]],
         max_tokens: int = 512,
+        output_schema: dict[str, Any] | None = None,
     ) -> str:
         ollama_messages = [{"role": "system", "content": system}, *messages]
         response = await self._client.chat(
             model=self._model,
             messages=ollama_messages,
             think=False,   # disable chain-of-thought tokens (qwen3/deepseek-r1 etc.)
+            # Ollama structured outputs (AI-5): constrained decoding against
+            # the JSON schema, mirroring the Anthropic engine's output_config.
+            format=output_schema,
             options={"num_predict": max_tokens, "temperature": 0.2},
         )
         return response.message.content or ""

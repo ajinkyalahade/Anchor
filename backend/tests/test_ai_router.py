@@ -198,3 +198,94 @@ async def test_rsd_endpoint_triggers_crisis_classifier() -> None:
     assert data["is_crisis"] is True
     assert data["resources"] is not None
     assert len(data["resources"]) > 0
+
+
+# ── Structured outputs (AI-5) ─────────────────────────────────────────────────
+
+def _walk_objects(schema: dict) -> list[dict]:
+    """Yield every object-typed node in a JSON schema."""
+    found = []
+    if schema.get("type") == "object":
+        found.append(schema)
+        for sub in schema.get("properties", {}).values():
+            found.extend(_walk_objects(sub))
+    elif schema.get("type") == "array":
+        found.extend(_walk_objects(schema.get("items", {})))
+    return found
+
+
+def test_output_schemas_are_structured_outputs_compatible() -> None:
+    """Every object node needs additionalProperties: false and a required
+    list — the API rejects schemas without them."""
+    from app.ai.prompts.registry import BRIEFING_SCHEMA, NUDGE_SCHEMA
+
+    schemas = [s.output_schema for s in ALL_SPECS.values() if s.output_schema]
+    schemas += [BRIEFING_SCHEMA, NUDGE_SCHEMA]
+    assert schemas, "expected at least one output schema"
+
+    for schema in schemas:
+        for node in _walk_objects(schema):
+            assert node.get("additionalProperties") is False
+            assert node.get("required"), f"object without required list: {node}"
+
+
+def test_output_schema_required_covers_spec_required_keys() -> None:
+    for spec in ALL_SPECS.values():
+        if spec.output_schema is None:
+            continue
+        assert spec.required_keys <= set(spec.output_schema["required"]), spec.id
+
+
+def test_coach_spec_has_no_schema() -> None:
+    """Coach deliberately allows prose responses — no forced schema."""
+    from app.ai.prompts.registry import COACH_SPEC
+
+    assert COACH_SPEC.output_schema is None
+
+
+@pytest.mark.asyncio
+async def test_anthropic_engine_passes_output_config() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.ai.engines.anthropic_engine import AnthropicEngine
+
+    engine = AnthropicEngine(api_key="sk-test")
+    block = MagicMock()
+    block.text = '{"valid": true, "score": 3, "reason": "ok"}'
+    response = MagicMock(content=[block])
+    engine._client = MagicMock()
+    engine._client.messages.create = AsyncMock(return_value=response)
+
+    await engine.complete(
+        system="s",
+        messages=[{"role": "user", "content": "hi"}],
+        output_schema=WORDGYM_SPEC.output_schema,
+    )
+    kwargs = engine._client.messages.create.call_args.kwargs
+    assert kwargs["output_config"] == {
+        "format": {"type": "json_schema", "schema": WORDGYM_SPEC.output_schema}
+    }
+
+    # Without a schema, output_config must not be sent at all.
+    await engine.complete(system="s", messages=[{"role": "user", "content": "hi"}])
+    assert "output_config" not in engine._client.messages.create.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_ollama_engine_passes_format_schema() -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.ai.engines.ollama_engine import OllamaEngine
+
+    engine = OllamaEngine()
+    message = MagicMock()
+    message.content = '{"valid": true, "score": 3, "reason": "ok"}'
+    engine._client = MagicMock()
+    engine._client.chat = AsyncMock(return_value=MagicMock(message=message))
+
+    await engine.complete(
+        system="s",
+        messages=[{"role": "user", "content": "hi"}],
+        output_schema=WORDGYM_SPEC.output_schema,
+    )
+    assert engine._client.chat.call_args.kwargs["format"] == WORDGYM_SPEC.output_schema
