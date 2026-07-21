@@ -11,14 +11,28 @@ from app.core.config import get_settings
 from app.core.token_revocation import is_token_revoked
 from app.db.database import get_db
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user_id(
     request: Request,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
 ) -> uuid.UUID:
-    token = credentials.credentials
+    """Authenticate via bearer header or the anchor_session cookie (SEC-5).
+
+    The httpOnly cookie is the primary session carrier (not readable by
+    JS, so XSS can't exfiltrate it); the bearer header remains supported
+    and wins when both are present. CSRF is covered by SameSite=strict on
+    the cookie plus the explicit CORS allowlist — all state-changing
+    endpoints are JSON APIs, unreachable by cross-site form posts.
+    """
+    token = credentials.credentials if credentials else request.cookies.get("anchor_session")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="not_authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         payload = jwt.decode(
             token,

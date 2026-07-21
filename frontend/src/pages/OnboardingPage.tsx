@@ -129,7 +129,7 @@ export default function OnboardingPage() {
 
   // Check if already logged in -> skip onboarding
   useEffect(() => {
-    if (localStorage.getItem('anchor_jwt')) {
+    if (api.isAuthenticated()) {
       navigate('/');
     }
   }, [navigate]);

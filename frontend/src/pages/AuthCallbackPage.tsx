@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui';
+import { api } from '../lib/api';
 
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -8,12 +9,7 @@ export default function AuthCallbackPage() {
   // This page is no longer needed with email/password auth.
   // Redirect to login if someone lands here.
   useEffect(() => {
-    const jwt = localStorage.getItem('anchor_jwt');
-    if (jwt) {
-      navigate('/');
-    } else {
-      navigate('/login');
-    }
+    navigate(api.isAuthenticated() ? '/' : '/login');
   }, [navigate]);
 
   return (

@@ -3,12 +3,14 @@ import { MemoryRouter } from 'react-router-dom';
 
 import OnboardingPage from './OnboardingPage';
 
-const { navigateMock, postMock, setAuthTokenMock, confettiMock } = vi.hoisted(() => ({
-  navigateMock: vi.fn(),
-  postMock: vi.fn(),
-  setAuthTokenMock: vi.fn(),
-  confettiMock: vi.fn(),
-}));
+const { navigateMock, postMock, setAuthTokenMock, isAuthenticatedMock, confettiMock } =
+  vi.hoisted(() => ({
+    navigateMock: vi.fn(),
+    postMock: vi.fn(),
+    setAuthTokenMock: vi.fn(),
+    isAuthenticatedMock: vi.fn(() => false),
+    confettiMock: vi.fn(),
+  }));
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -22,6 +24,7 @@ vi.mock('../lib/api', () => ({
   api: {
     post: postMock,
     setAuthToken: setAuthTokenMock,
+    isAuthenticated: isAuthenticatedMock,
   },
 }));
 

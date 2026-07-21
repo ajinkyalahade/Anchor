@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SESSION_EXPIRED_EVENT } from './lib/api';
+import { SESSION_EXPIRED_EVENT, refreshSession } from './lib/api';
 import { applyTheme } from './lib/rewards';
 
 import AuthGuard from './components/AuthGuard';
@@ -76,6 +76,12 @@ function AppLayout() {
     window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, [navigate]);
+
+  // Rotate the session token once per app load (SEC-5) — active users
+  // slide forward; a stolen token dies at the owner's next visit.
+  useEffect(() => {
+    void refreshSession();
+  }, []);
 
   const showSidebar =
     !NO_SIDEBAR_PATHS.includes(location.pathname) &&

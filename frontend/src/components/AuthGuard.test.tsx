@@ -35,14 +35,16 @@ describe('AuthGuard', () => {
     });
   });
 
-  it('redirects to login if no JWT is present', () => {
+  it('redirects to login when no session flag is present', () => {
     renderAuthGuard('/');
 
     expect(screen.getByText('Login page')).toBeInTheDocument();
   });
 
-  it('renders protected content when a JWT exists', () => {
-    window.localStorage.setItem('anchor_jwt', 'test-token');
+  it('renders protected content when the session flag is set', () => {
+    // The raw token now lives in an httpOnly cookie (SEC-5); AuthGuard only
+    // reads the non-sensitive routing flag.
+    window.localStorage.setItem('anchor_authed', '1');
 
     renderAuthGuard('/');
 

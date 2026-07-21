@@ -245,6 +245,65 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
     return {"status": "logged_out"}
 
 
+refresh_rate_limit = build_ip_rate_limit_dependency(
+    "auth-refresh", max_requests=10, window_seconds=60
+)
+
+
+@router.post(
+    "/refresh",
+    response_model=AuthResponse,
+    dependencies=[Depends(refresh_rate_limit)],
+)
+async def refresh(request: Request, response: Response) -> AuthResponse:
+    """Rotate the session token (SEC-5): validate the presented token,
+    revoke its jti, and issue a fresh one. Called by the app on startup so
+    active users slide their session forward while a stolen token's
+    lifetime is cut short the next time the real user opens the app."""
+    response.headers["Cache-Control"] = "no-store"
+
+    token = _bearer_or_cookie_token(request)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="not_authenticated"
+        )
+    try:
+        claims = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="token_expired"
+        ) from err
+    except jwt.InvalidTokenError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="token_invalid"
+        ) from err
+
+    cache = getattr(request.app.state, "cache", None)
+    from app.core.token_revocation import is_token_revoked
+
+    if await is_token_revoked(cache, claims.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="token_revoked"
+        )
+
+    # Revoke the old token before minting its successor — a replayed old
+    # token must die the moment the rotation happens.
+    await revoke_token(cache, claims.get("jti"), claims.get("exp"))
+
+    access_token, access_expiry = build_access_token(
+        user_id=str(claims["sub"]),
+        email=claims.get("email"),
+        secret=get_settings().jwt_secret,
+    )
+    _set_session_cookie(response, access_token)
+    return AuthResponse(
+        status="refreshed",
+        user_id=uuid.UUID(claims["sub"]),
+        access_token=access_token,
+        expires_at=datetime.fromtimestamp(access_expiry, UTC),
+    )
+
+
 class MeResponse(BaseModel):
     user_id: uuid.UUID
     email: str | None

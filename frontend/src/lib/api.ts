@@ -17,21 +17,45 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
 }
 
+/** Non-sensitive marker that a session exists. The session itself lives in
+ * the httpOnly anchor_session cookie (SEC-5) — unreadable by JS, so XSS
+ * can't exfiltrate it. This flag only routes the UI (AuthGuard). */
+const AUTH_FLAG = 'anchor_authed';
+/** Pre-cookie-migration key: the raw JWT used to be persisted here. */
+const LEGACY_JWT_KEY = 'anchor_jwt';
+
 class ApiClient {
   private baseUrl: string;
-  private authToken: string | null = localStorage.getItem('anchor_jwt');
+  // Held in memory for the lifetime of the tab; across reloads the
+  // httpOnly cookie authenticates requests instead.
+  private authToken: string | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
+    // One-time migration: adopt a legacy localStorage token into memory and
+    // scrub it. The backend has been setting the session cookie alongside
+    // every login, so the cookie takes over from the next reload.
+    const legacy = localStorage.getItem(LEGACY_JWT_KEY);
+    if (legacy) {
+      this.authToken = legacy;
+      localStorage.removeItem(LEGACY_JWT_KEY);
+      localStorage.setItem(AUTH_FLAG, '1');
+    }
   }
 
   setAuthToken(token: string | null) {
     this.authToken = token;
     if (token) {
-      localStorage.setItem('anchor_jwt', token);
+      localStorage.setItem(AUTH_FLAG, '1');
     } else {
-      localStorage.removeItem('anchor_jwt');
+      localStorage.removeItem(AUTH_FLAG);
     }
+  }
+
+  /** Whether a session is believed to exist (UI routing only — the server
+   * remains the authority via 401s). */
+  isAuthenticated(): boolean {
+    return localStorage.getItem(AUTH_FLAG) === '1';
   }
 
   private buildUrl(path: string, params?: Record<string, string>): string {
@@ -142,3 +166,19 @@ export class ApiError extends Error {
 }
 
 export const api = new ApiClient(BASE_URL);
+
+/** Rotate the session token on app start (SEC-5). Best-effort: a 401 means
+ * the session is truly gone (expired/revoked) and ends it; network errors
+ * are ignored so being offline never logs anyone out. */
+export async function refreshSession(): Promise<void> {
+  if (!api.isAuthenticated()) return;
+  try {
+    const r = await api.post<{ access_token: string }>('/auth/refresh');
+    api.setAuthToken(r.access_token);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      api.setAuthToken(null);
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    }
+  }
+}
