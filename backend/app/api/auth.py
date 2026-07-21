@@ -7,7 +7,7 @@ from typing import Annotated
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,18 +47,17 @@ register_rate_limit = build_ip_rate_limit_dependency(
 # ---------------------------------------------------------------------------
 
 class RegisterPayload(BaseModel):
-    email: str
+    email: EmailStr
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=8, max_length=128)
 
     @field_validator("email")
     @classmethod
-    def validate_email(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
-            raise ValueError("Invalid email address")
-        return normalized
+    def normalize_email(cls, value: str) -> str:
+        # EmailStr already validated the syntax; lowercase so lookups and the
+        # uniqueness check are case-insensitive.
+        return value.strip().lower()
 
     @field_validator("first_name", "last_name")
     @classmethod

@@ -200,6 +200,65 @@ async def test_login_rejects_bad_password() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("bad_email", ["notanemail", "no@tld", "@example.com", "a b@x.com"])
+async def test_register_rejects_malformed_email(bad_email: str) -> None:
+    """SEC-6: registration now validates email syntax via EmailStr instead of
+    the old ``"@" in value`` check, so obvious garbage is a 422."""
+    fake_session = FakeSession()
+
+    async def override_get_db():
+        yield fake_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/v1/auth/register",
+                json={
+                    "email": bad_email,
+                    "first_name": "New",
+                    "last_name": "User",
+                    "password": "secret123",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422, response.text
+    assert len(fake_session.users) == 0
+
+
+@pytest.mark.asyncio
+async def test_register_normalizes_email_case() -> None:
+    """Mixed-case emails are lowercased so the uniqueness check is case-insensitive."""
+    fake_session = FakeSession()
+
+    async def override_get_db():
+        yield fake_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/v1/auth/register",
+                json={
+                    "email": "Mixed.Case@Example.COM",
+                    "first_name": "New",
+                    "last_name": "User",
+                    "password": "secret123",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201, response.text
+    created = next(iter(fake_session.users.values()))
+    assert created.email == "mixed.case@example.com"
+
+
+@pytest.mark.asyncio
 async def test_register_anonymous_creates_token() -> None:
     fake_session = FakeSession()
 
