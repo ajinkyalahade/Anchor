@@ -25,6 +25,10 @@ def create_app() -> FastAPI:
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
     init_error_tracking(dsn=settings.sentry_dsn, environment=settings.app_env)
 
+    # BE-9: the interactive docs and the OpenAPI schema enumerate every route
+    # and payload shape — useful in dev, needless attack-surface in prod. Serve
+    # them everywhere except production.
+    docs_enabled = settings.app_env != "production"
     app = FastAPI(
         title="Anchor API",
         description=(
@@ -32,8 +36,9 @@ def create_app() -> FastAPI:
             " and executive-function challenges."
         ),
         version="0.1.0",
-        docs_url="/v1/docs",
-        openapi_url="/v1/openapi.json",
+        docs_url="/v1/docs" if docs_enabled else None,
+        redoc_url="/v1/redoc" if docs_enabled else None,
+        openapi_url="/v1/openapi.json" if docs_enabled else None,
     )
     app.state.idempotency_store = InMemoryIdempotencyStore()
     app.state.cache = AppCache(settings.redis_url)
