@@ -1,0 +1,40 @@
+# Gitleaks configuration (SEC-8).
+#
+# Primary secret scanner for CI. Extends the upstream default ruleset (which
+# covers JWTs, cloud keys, private keys, provider tokens, DB URLs with
+# passwords, etc. — far more than the old check-secrets.sh regex) and adds a
+# narrow allowlist for known, reviewed false positives.
+
+title = "Anchor gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed false positives and non-source paths"
+
+# Paths that never contain real secrets. Belt-and-suspenders for local `dir`
+# scans — most of these are gitignored and absent in a CI checkout anyway.
+paths = [
+  '''\.env\.example$''',
+  '''\.env\..*\.example$''',
+  '''package-lock\.json$''',
+  '''(^|/)node_modules/''',
+  '''(^|/)\.venv/''',
+  '''(^|/)dist/''',
+  '''(^|/)storybook-static/''',
+  '''(^|/)\.tmp-[^/]+/''',
+  '''(^|/)\.claude/''',
+  # Test files use obvious throwaway fixtures (e.g. reward-focus-uuid-123).
+  '''\.test\.[jt]sx?$''',
+  '''\.spec\.[jt]sx?$''',
+  '''(^|/)tests?/''',
+]
+
+# Reviewed false positives that the generic-api-key rule over-matches:
+#   - anchor_*_v1  → localStorage key names, not secrets
+#   - xp_awarded=… → an assignment expression in games.py
+regexes = [
+  '''anchor_[a-z_]+_v\d+''',
+  '''xp_awarded''',
+]
