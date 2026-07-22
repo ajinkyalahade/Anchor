@@ -4,9 +4,10 @@ Index of everything under `docs/`.
 
 ## Operations & status
 
-- [`PRODUCTION_READINESS.md`](PRODUCTION_READINESS.md) — the production-readiness audit and its living checklist (steps 1–19 done; drives ongoing hardening work)
+- [`PRODUCTION_READINESS.md`](PRODUCTION_READINESS.md) — the production-readiness audit and its living checklist (drives ongoing hardening work)
 - [`DEPLOYMENT.md`](DEPLOYMENT.md) — Render deployment runbook: first deploy, verification, backup/restore drill, retention policy, key rotation
 - [`AI_ENGINE_DECISION.md`](AI_ENGINE_DECISION.md) — why production AI runs on the hosted Anthropic API
+- [`legal/`](legal/) — **draft** Privacy Policy and Terms of Service (pending legal review before public launch)
 - [`BUGS.md`](BUGS.md) — bug log from manual testing (stale — pending the FE-6 re-triage)
 
 ## Product

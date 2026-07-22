@@ -80,7 +80,10 @@ except through the proxy.
 - DB snapshots age out on the provider's schedule (7 days) — a deleted
   account is therefore fully gone from backups within a week.
 - `rsd_logs` are stored pseudonymously (never linked to a user id).
-- Still needed before public launch: privacy policy + ToS documents.
+- Privacy Policy and Terms of Service **drafts** live in `docs/legal/`
+  (`PRIVACY_POLICY.md`, `TERMS_OF_SERVICE.md`) — grounded in the app's real
+  data practices but **must be finalized by counsel** and published before
+  public launch.
 
 ## Key rotation
 
