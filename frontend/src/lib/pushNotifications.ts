@@ -1,13 +1,14 @@
+import { api } from './api';
+
 const VAPID_PUBLIC_KEY_ENV = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '';
 
 async function getVapidPublicKey(): Promise<string> {
   if (VAPID_PUBLIC_KEY_ENV) return VAPID_PUBLIC_KEY_ENV;
   try {
-    const res = await fetch('/v1/notifications/vapid-public-key');
-    if (res.ok) {
-      const data = await res.json() as { public_key: string };
-      return data.public_key ?? '';
-    }
+    // No VAPID keys configured → server returns an empty string and push
+    // degrades gracefully (subscribeToPush returns null).
+    const data = await api.get<{ public_key: string }>('/notifications/vapid-public-key');
+    return data.public_key ?? '';
   } catch { /* fall through */ }
   return '';
 }
@@ -47,10 +48,11 @@ export async function sendSubscriptionToServer(
   sub: PushSubscription,
   crashWindow: string
 ): Promise<void> {
-  await fetch('/api/v1/notifications/subscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subscription: sub.toJSON(), crash_window: crashWindow }),
+  // Route through the shared client so it hits the real /v1 base and carries
+  // the session (previously posted to a non-existent /api/v1/... path).
+  await api.post('/notifications/subscribe', {
+    subscription: sub.toJSON(),
+    crash_window: crashWindow,
   });
 }
 

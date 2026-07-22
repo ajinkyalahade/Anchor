@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
-import { registerRoute } from 'workbox-routing';
+import { clientsClaim } from 'workbox-core';
+import { cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from 'workbox-precaching';
+import { registerRoute, setCatchHandler } from 'workbox-routing';
 import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 
 declare let self: ServiceWorkerGlobalScope & {
@@ -9,6 +10,12 @@ declare let self: ServiceWorkerGlobalScope & {
     url: string;
   }>;
 };
+
+// registerType: 'autoUpdate' only takes effect if the new worker activates and
+// claims open pages — otherwise a fresh bundle sits "waiting" and users keep
+// running stale code until every tab closes. Take over immediately.
+void self.skipWaiting();
+clientsClaim();
 
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
@@ -19,6 +26,18 @@ registerRoute(
     cacheName: 'anchor-app-shell',
   }),
 );
+
+// Offline fallback: when a navigation can't be served from network or cache
+// (e.g. first visit while offline, or an uncached deep link), return the
+// precached SPA shell so the app still boots and shows its own offline UI
+// instead of the browser's dinosaur.
+setCatchHandler(async ({ request }) => {
+  if (request.mode === 'navigate') {
+    const shell = await matchPrecache('index.html');
+    if (shell) return shell;
+  }
+  return Response.error();
+});
 
 registerRoute(
   ({ request }) => ['style', 'script', 'worker'].includes(request.destination),
