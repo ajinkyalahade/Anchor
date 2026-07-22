@@ -108,3 +108,14 @@ def capture_exception(exc: BaseException) -> None:
         sentry_sdk.capture_exception(exc)
     except Exception:
         pass
+
+
+def capture_message(message: str, *, level: str = "error") -> None:
+    """Forward a message-level alert to Sentry if configured; always safe to
+    call (no-op when Sentry isn't initialized)."""
+    try:
+        import sentry_sdk
+
+        sentry_sdk.capture_message(message, level=level)
+    except Exception:
+        pass

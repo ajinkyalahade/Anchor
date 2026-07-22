@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     # "auto" tries Ollama first; falls back to Anthropic if unavailable.
     ai_default_engine: str = "anthropic"
 
+    # AI fallback-rate alerting (AI-1): when the share of recent AI dispatches
+    # that fell back to canned responses exceeds the threshold, emit an ERROR
+    # log + Sentry message so a provider outage isn't silently invisible.
+    ai_fallback_alert_threshold: float = 0.5  # 50% of the recent window
+    ai_fallback_alert_window: int = 20  # rolling sample size
+    ai_fallback_alert_cooldown_seconds: int = 300  # don't re-alert within 5 min
+
     # Live rooms
     livekit_url: str = ""
     livekit_api_key: str = ""
