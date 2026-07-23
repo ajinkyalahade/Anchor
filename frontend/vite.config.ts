@@ -38,6 +38,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setupTests.ts',
+    // Unit tests live in src/; Playwright owns e2e/ (different runner/API).
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['e2e/**', 'node_modules/**'],
     coverage: {
       // Measure all source files, not just those imported by tests —
       // otherwise the number flatters untested pages. Report-only for now

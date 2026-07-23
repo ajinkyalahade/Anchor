@@ -71,3 +71,74 @@ jobs:
       # Coverage is measured over all of src/ (report-only; see vite.config.ts)
       - run: npm test -- --coverage
       - run: npm run build
+
+  e2e:
+    # Full-stack smoke (TEST-3): drives the real backend + DB + Redis through
+    # the Vite proxy with Playwright. Playwright owns the frontend dev server;
+    # this job starts the backend.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: anchor
+          POSTGRES_USER: anchor
+          POSTGRES_PASSWORD: anchor_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anchor"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://anchor:anchor_dev@localhost:5432/anchor
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Backend: migrate, then run the API in the background on :8000.
+      - run: uv sync --dev
+        working-directory: backend
+      - run: uv run alembic upgrade head
+        working-directory: backend
+      - name: Start backend
+        working-directory: backend
+        run: |
+          uv run uvicorn app.main:app --port 8000 --log-level warning &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8000/v1/health/live && break
+            sleep 1
+          done
+
+      # Frontend: install deps + Playwright chromium, run the smoke suite.
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run e2e
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
