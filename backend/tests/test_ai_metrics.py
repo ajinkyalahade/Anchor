@@ -38,16 +38,23 @@ async def test_route_records_a_fallback_when_no_api_key() -> None:
     assert snap["tasks"]["decompose"]["fallbacks"] == 1
 
 
+class _AlertSettings:
+    """Controlled thresholds so the alert path is deterministic regardless of
+    the real Settings singleton or suite ordering (_maybe_alert calls
+    get_settings() fresh, so we patch the function, not a shared instance)."""
+
+    def __init__(self, *, window: int = 5, threshold: float = 0.5, cooldown: int = 300):
+        self.ai_fallback_alert_window = window
+        self.ai_fallback_alert_threshold = threshold
+        self.ai_fallback_alert_cooldown_seconds = cooldown
+
+
 def test_fallback_alert_fires_once_when_rate_exceeds_threshold(monkeypatch) -> None:
     """AI-1: a run of fallbacks past the threshold emits exactly one alert
     (cooldown suppresses repeats)."""
-    from app.core.config import get_settings
-
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_fallback_alert_window", 5, raising=False)
-    monkeypatch.setattr(settings, "ai_fallback_alert_threshold", 0.5, raising=False)
-    monkeypatch.setattr(settings, "ai_fallback_alert_cooldown_seconds", 300, raising=False)
-
+    monkeypatch.setattr(
+        "app.core.config.get_settings", lambda: _AlertSettings(window=5, threshold=0.5)
+    )
     alerts: list[str] = []
     monkeypatch.setattr(
         "app.core.observability.capture_message",
@@ -67,12 +74,9 @@ def test_fallback_alert_fires_once_when_rate_exceeds_threshold(monkeypatch) -> N
 
 
 def test_no_alert_below_threshold(monkeypatch) -> None:
-    from app.core.config import get_settings
-
-    settings = get_settings()
-    monkeypatch.setattr(settings, "ai_fallback_alert_window", 5, raising=False)
-    monkeypatch.setattr(settings, "ai_fallback_alert_threshold", 0.9, raising=False)
-
+    monkeypatch.setattr(
+        "app.core.config.get_settings", lambda: _AlertSettings(window=5, threshold=0.9)
+    )
     alerts: list[str] = []
     monkeypatch.setattr(
         "app.core.observability.capture_message",
